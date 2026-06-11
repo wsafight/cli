@@ -36,8 +36,9 @@ export async function launchClient(
     if (!(await binFile.exists())) {
       // Tako 管理目录没找到，fallback 到 PATH 中的全局安装
       const { execSync } = await import("node:child_process");
+      const findCmd = process.platform === "win32" ? `where ${client.command}` : `which ${client.command}`;
       try {
-        const globalBin = execSync(`which ${client.command}`, { encoding: "utf8" }).trim();
+        const globalBin = execSync(findCmd, { encoding: "utf8" }).trim().split("\n")[0];
         if (globalBin) binPath = globalBin;
         else return { success: false, error: `找不到 ${client.command}，请运行 tako install ${client.id}` };
       } catch {
