@@ -70,12 +70,15 @@ export async function installAtVersion(client: ClientConfig, version: string): P
 
   await fs.mkdir(clientDir, { recursive: true });
 
-  // 确保 package.json 存在（bun add 需要）
+  // 清理旧安装（bun 不会自动更新 optional deps 如 platform binary）
+  const lockPath = join(clientDir, "bun.lock");
+  const nmPath = join(clientDir, "node_modules");
+  await fs.rm(lockPath, { force: true }).catch(() => {});
+  await fs.rm(nmPath, { recursive: true, force: true }).catch(() => {});
+
+  // 写 package.json
   const pkgPath = join(clientDir, "package.json");
-  const pkgFile = Bun.file(pkgPath);
-  if (!(await pkgFile.exists())) {
-    await Bun.write(pkgPath, JSON.stringify({ name: `tako-${client.id}-host`, version: "0.0.0", private: true }, null, 2));
-  }
+  await Bun.write(pkgPath, JSON.stringify({ name: `tako-${client.id}-host`, version: "0.0.0", private: true }, null, 2));
 
   const registry = await getNpmRegistry();
   const { detectRegion } = await import("./region");

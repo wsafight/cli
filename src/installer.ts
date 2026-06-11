@@ -717,14 +717,12 @@ export async function installClient(
     const region = await detectRegion();
     log.info(`网络环境: ${region === "cn" ? "国内（npmmirror）" : "海外"} | registry: ${registry}`);
 
-    // 如果是更新，删除 lockfile 确保能更新到最新版本
+    // 如果是更新，删除 lockfile + node_modules 确保 optional deps 也更新
     if (isInstalled) {
       const lockfilePath = join(clientDir, "bun.lock");
-      try {
-        await fs.unlink(lockfilePath);
-      } catch {
-        // lockfile 不存在，忽略
-      }
+      const nmPath = join(clientDir, "node_modules");
+      await fs.rm(lockfilePath, { force: true }).catch(() => {});
+      await fs.rm(nmPath, { recursive: true, force: true }).catch(() => {});
     }
 
     // 使用 bun 安装包（指定 @latest 确保获取最新版本）
