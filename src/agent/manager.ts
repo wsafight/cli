@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ApprovalMode, Backend, Driver, SendHooks, SessionMeta } from "./types";
+import type { ApprovalMode, Backend, Driver, SendHooks, SessionMeta, SessionStatus } from "./types";
 import { claudeDriver, attachEnv as attachClaudeEnv } from "./drivers/claude";
 import { codexDriver, attachEnv as attachCodexEnv } from "./drivers/codex";
 import { initSession, listSessions, readMeta, removeSession, writeMeta, tailLog } from "./storage";
@@ -80,6 +80,43 @@ export async function closeSession(sid: string, purge = false): Promise<void> {
 }
 
 export async function listAllSessions(): Promise<SessionMeta[]> { return listSessions(); }
+
+export interface SessionFilter {
+  /** 状态过滤；缺省时默认隐藏 closed（除非 includeClosed/all） */
+  status?: SessionStatus[];
+  /** 显式包含 closed（配合 status 缺省时） */
+  includeClosed?: boolean;
+  namePrefix?: string;
+  backend?: Backend;
+  model?: string;
+  /** turnCount 精确匹配（用于挑 0-turn idle） */
+  turns?: number;
+}
+
+/**
+ * 纯函数：按 filter 过滤 session 列表。抽出便于单测，不碰落盘/进程。
+ *
+ * 默认行为：status 未指定时隐藏 closed（除非 includeClosed=true），
+ * 缓解“list 噪声大”的痛点。指定 status 时按 status 精确过滤。
+ */
+export function filterSessions(metas: SessionMeta[], filter: SessionFilter = {}): SessionMeta[] {
+  return metas.filter((m) => {
+    if (filter.status && filter.status.length > 0) {
+      if (!filter.status.includes(m.status)) return false;
+    } else if (!filter.includeClosed && m.status === "closed") {
+      return false;
+    }
+    if (filter.namePrefix && !m.name.startsWith(filter.namePrefix)) return false;
+    if (filter.backend && m.backend !== filter.backend) return false;
+    if (filter.model && m.model !== filter.model) return false;
+    if (filter.turns !== undefined && m.turnCount !== filter.turns) return false;
+    return true;
+  });
+}
+
+export async function listSessionsFiltered(filter: SessionFilter = {}): Promise<SessionMeta[]> {
+  return filterSessions(await listSessions(), filter);
+}
 
 export async function showSession(sid: string, logLines = 50) {
   const meta = await readMeta(sid);

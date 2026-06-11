@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import { extractShellCommand, summarizeToolResult, describeApproval, truncate } from "../src/agent/printer";
+import { extractShellCommand, summarizeToolResult, describeApproval, truncate, toolResultFailed, extractStderr, hasErrorFrame } from "../src/agent/printer";
+import type { NormalizedFrame } from "../src/agent/types";
 
 describe("agent/printer", () => {
   describe("extractShellCommand", () => {
@@ -61,6 +62,49 @@ describe("agent/printer", () => {
       const result = truncate("a".repeat(20), 10);
       expect(result).toHaveLength(10 + "…(+10)".length);
       expect(result).toContain("…(+10)");
+    });
+  });
+
+  // 失败日志查看相关纯函数
+  describe("error helpers", () => {
+    // TP-AGENT-09
+    it("toolResultFailed detects non-zero exit / error / deny", () => {
+      expect(toolResultFailed({ exit_code: 1 })).toBe(true);
+      expect(toolResultFailed({ exitCode: 127 })).toBe(true);
+      expect(toolResultFailed({ exit_code: 0 })).toBe(false);
+      expect(toolResultFailed({ is_error: true })).toBe(true);
+      expect(toolResultFailed({ error: "boom" })).toBe(true);
+      expect(toolResultFailed({ approval: "deny" })).toBe(true);
+      expect(toolResultFailed("plain")).toBe(false);
+      expect(toolResultFailed(null)).toBe(false);
+    });
+
+    // TP-AGENT-10: stderr 不截断
+    it("extractStderr returns full stderr untruncated", () => {
+      const long = "line1\n" + "x".repeat(500);
+      expect(extractStderr({ stderr: long })).toBe(long);
+      expect(extractStderr({ error: "err msg" })).toBe("err msg");
+      expect(extractStderr({ stdout: "ok" })).toBeNull();
+    });
+
+    // TP-AGENT-11: hasErrorFrame
+    it("hasErrorFrame detects error frame and failed tool_result", () => {
+      const errFrames: NormalizedFrame[] = [
+        { ts: 1, kind: "text_delta", text: "hi" },
+        { ts: 2, kind: "error", message: "upstream 500", raw: { code: 500 } },
+      ];
+      expect(hasErrorFrame(errFrames)).toBe(true);
+
+      const toolFail: NormalizedFrame[] = [
+        { ts: 1, kind: "tool_result", output: { exit_code: 2, stderr: "nope" } },
+      ];
+      expect(hasErrorFrame(toolFail)).toBe(true);
+
+      const clean: NormalizedFrame[] = [
+        { ts: 1, kind: "tool_result", output: { exit_code: 0, stdout: "done" } },
+        { ts: 2, kind: "turn_completed" },
+      ];
+      expect(hasErrorFrame(clean)).toBe(false);
     });
   });
 });

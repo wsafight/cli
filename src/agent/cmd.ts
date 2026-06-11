@@ -1,13 +1,14 @@
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
-import { logPath, listPendingApprovals, writeApprovalResponse, readApprovalResponse } from "./storage";
+import { logPath, listPendingApprovals, writeApprovalResponse, readApprovalResponse, tailLog } from "./storage";
 import {
   startSession, sendToSession, cancelSession, closeSession,
   listAllSessions, showSession, purgeDead, setAgentDefault, getAgentDefaults,
+  listSessionsFiltered, type SessionFilter,
 } from "./manager";
 import { loadPolicy, readSessionPolicyOverride, writeSessionPolicyOverride, appendSessionExecAllow, DEFAULT_POLICY } from "./policy";
-import { printFrame, toLeanFrame, describeApproval, type PrintMode } from "./printer";
+import { printFrame, toLeanFrame, describeApproval, toolResultFailed, hasErrorFrame, type PrintMode } from "./printer";
 import type { ApprovalMode, Backend, NormalizedFrame } from "./types";
 
 function parseFlags(args: string[]): { positional: string[]; flags: Record<string, string | true> } {
@@ -32,17 +33,32 @@ function fmtAge(ms: number): string {
   return `${Math.floor(s / 86400)}d`;
 }
 
+/** 从 flags 提取批量过滤条件；返回 filter 与「是否带了任何过滤 flag」 */
+function buildFilter(flags: Record<string, string | true>): { filter: SessionFilter; hasFilter: boolean } {
+  const filter: SessionFilter = {};
+  let hasFilter = false;
+  if (typeof flags.status === "string") { filter.status = flags.status.split(",").map((s) => s.trim()).filter(Boolean) as any; hasFilter = true; }
+  if (typeof flags["name-prefix"] === "string") { filter.namePrefix = flags["name-prefix"]; hasFilter = true; }
+  if (typeof flags.backend === "string") { filter.backend = flags.backend as any; hasFilter = true; }
+  if (typeof flags.model === "string") { filter.model = flags.model; hasFilter = true; }
+  if (typeof flags.turns === "string") { filter.turns = parseInt(flags.turns, 10); hasFilter = true; }
+  if (flags.all === true || flags.closed === true) { filter.includeClosed = true; }
+  return { filter, hasFilter };
+}
+
 export async function runAgentCommand(rawArgs: string[]): Promise<void> {
   const sub = rawArgs[0];
   const rest = rawArgs.slice(1);
   if (!sub || sub === "help" || sub === "-h" || sub === "--help") { printHelp(); return; }
   switch (sub) {
     case "start": return cmdStart(rest);
-    case "list": case "ls": return cmdList();
+    case "run": return cmdRun(rest);
+    case "list": case "ls": return cmdList(rest);
     case "send": return cmdSend(rest);
     case "cancel": return cmdCancel(rest);
     case "close": return cmdClose(rest);
     case "show": return cmdShow(rest);
+    case "logs": case "log": return cmdLogs(rest);
     case "attach": return cmdAttach(rest);
     case "purge": return cmdPurge();
     case "default": return cmdSetDefault(rest);
@@ -59,14 +75,21 @@ function printHelp(): void {
   console.log(`
 tako agent <子命令> [...]
 
-  start <claude|codex> [--model X] [--name N] [--cwd .] [--provider id] [--approval yolo|external]
-  list                              列出所有 session
+  start <claude|codex> [--model X] [--name N] [--cwd .] [--provider id] [--approval yolo|external] [--json]
+  run <claude|codex> --prompt "..." [--model X] [--name N] [--cwd .] [--provider id] [--json] [--purge] [--approval]
+                                    一次性任务：start+send+(可选)回收；默认保留 session，--purge 才删
+  list [筛选] [--json]              列出 session（默认隐藏 closed）
   send [--json|--verbose] <sid> <prompt>
-  cancel <sid>                      中止当前 turn
-  close <sid> [--purge]             关闭 session
-  show <sid> [--lines N] [--json]   查看详情+日志
+  cancel <sid> | cancel [筛选]      中止 turn（带筛选则批量）
+  close <sid> [--purge] | close [筛选] [--purge] [--yes]   关闭 session（带筛选则批量）
+  show <sid> [--lines N] [--json] [--errors-only]   查看详情+日志（--errors-only 只看错误并展开详情）
+  logs <sid> [--errors] [--json]    dump 完整日志（不截断），--errors 只看错误帧
   attach <sid> [--json|--verbose]   实时跟随日志流
   purge                             清理 closed/dead session
+
+  筛选 flag（用于 list / 批量 close|cancel）：
+    --status idle,running   --name-prefix fg-   --backend claude   --model X
+    --turns 0               --all（含 closed）  --yes（批量免确认）
 
   pending <sid> [--json]            列待审批请求
   wait <sid> [--json] [--timeout N] 阻塞到下一决策点
@@ -106,6 +129,10 @@ async function cmdStart(args: string[]): Promise<void> {
     workdir: typeof flags.cwd === "string" ? flags.cwd : undefined,
     providerId: typeof flags.provider === "string" ? flags.provider : undefined, approvalMode,
   });
+  if (flags.json) {
+    process.stdout.write(JSON.stringify({ sid: meta.sid, name: meta.name, backend: meta.backend, model: meta.model ?? null, workdir: meta.workdir, approvalMode: meta.approvalMode ?? "yolo" }) + "\n");
+    return;
+  }
   console.log(`✓ ${meta.backend} session 已创建`);
   console.log(`  sid:      ${meta.sid}`);
   console.log(`  name:     ${meta.name}`);
@@ -115,20 +142,86 @@ async function cmdStart(args: string[]): Promise<void> {
   console.log(`\n后续：tako agent send ${meta.sid} "你的 prompt"`);
 }
 
-async function cmdList(): Promise<void> {
-  const sessions = await listAllSessions();
-  if (sessions.length === 0) { console.log("(暂无 session)"); return; }
-  const rows = sessions.map((m) => ({
-    sid: m.sid.slice(0, 8), backend: m.backend, name: m.name.slice(0, 20),
-    model: (m.model ?? "-").slice(0, 24), status: m.status, turns: String(m.turnCount),
-    age: fmtAge(Date.now() - m.createdAt), last: fmtAge(Date.now() - m.lastActiveAt),
-  }));
+/**
+ * run：一次性任务 = start + send（阻塞到 turn 完成）+ 按需回收。
+ * 默认保留 session 便于事后查日志；--purge 才 close+删目录（失败也回收）。
+ */
+async function cmdRun(args: string[]): Promise<void> {
+  const { positional, flags } = parseFlags(args);
+  const backend = positional[0] as Backend | undefined;
+  if (backend !== "claude" && backend !== "codex") { console.error("用法: tako agent run <claude|codex> --prompt \"...\""); process.exit(1); }
+  const prompt = typeof flags.prompt === "string" ? flags.prompt : positional.slice(1).join(" ");
+  if (!prompt) { console.error("缺少 --prompt"); process.exit(1); }
+  const json = !!flags.json;
+  const purge = !!flags.purge;
+  let approvalMode: ApprovalMode | undefined;
+  if (typeof flags.approval === "string") {
+    if (flags.approval !== "yolo" && flags.approval !== "external") { console.error("--approval 仅支持 yolo|external"); process.exit(1); }
+    approvalMode = flags.approval;
+  }
+
+  let sid = "";
+  let errorMsg: string | undefined;
+  const collected: string[] = [];
+  try {
+    const meta = await startSession({
+      backend, model: typeof flags.model === "string" ? flags.model : undefined,
+      name: typeof flags.name === "string" ? flags.name : undefined,
+      workdir: typeof flags.cwd === "string" ? flags.cwd : undefined,
+      providerId: typeof flags.provider === "string" ? flags.provider : undefined, approvalMode,
+    });
+    sid = meta.sid;
+    if (!json) console.log(`→ run ${sid.slice(0, 8)} (${meta.backend}${meta.model ? ` ${meta.model}` : ""})`);
+    await sendToSession(sid, prompt, {
+      onFrame: (f) => {
+        if (f.kind === "text_delta") collected.push(f.text);
+        else if (f.kind === "error") errorMsg = f.message;
+        if (!json) printFrame(f, "human");
+      },
+    });
+  } catch (e) {
+    errorMsg = e instanceof Error ? e.message : String(e);
+  }
+
+  const status = errorMsg ? "error" : "ok";
+  // --purge：无论成败都回收；默认保留
+  if (purge && sid) { try { await closeSession(sid, true); } catch { /* best effort */ } }
+
+  if (json) {
+    process.stdout.write(JSON.stringify({ sid, status, text: collected.join(""), error: errorMsg ?? null, purged: purge }) + "\n");
+  } else {
+    if (errorMsg) console.error(`✗ run 失败: ${errorMsg}`);
+    if (sid && !purge) console.log(`\nsession 保留: ${sid.slice(0, 8)}（tako agent show ${sid.slice(0, 8)} 查看；--purge 可自动回收）`);
+  }
+  if (errorMsg) process.exit(1);
+}
+
+async function cmdList(args: string[]): Promise<void> {
+  const { flags } = parseFlags(args);
+  const { filter } = buildFilter(flags);
+  const sessions = await listSessionsFiltered(filter);
+  if (flags.json) { process.stdout.write(JSON.stringify(sessions) + "\n"); return; }
+  const running = sessions.filter((m) => m.status === "running").length;
+  if (sessions.length === 0) { console.log("(无匹配 session)"); return; }
+  // 扫每个 session 尾部帧判定是否跑过 error，状态列加 ⚠ 标记
+  const errored = await Promise.all(sessions.map(async (m) => hasErrorFrame(await tailLog(m.sid, 60))));
+  let erroredCount = 0;
+  const rows = sessions.map((m, i) => {
+    const fail = errored[i];
+    if (fail) erroredCount++;
+    return {
+      sid: m.sid.slice(0, 8), backend: m.backend, name: m.name.slice(0, 20),
+      model: (m.model ?? "-").slice(0, 24), status: m.status + (fail ? " ⚠" : ""), turns: String(m.turnCount),
+      age: fmtAge(Date.now() - m.createdAt), last: fmtAge(Date.now() - m.lastActiveAt),
+    };
+  });
   const headers = ["sid", "backend", "name", "model", "status", "turns", "age", "last"];
   const widths = headers.map((h, i) => Math.max(h.length, ...rows.map((r) => (r as any)[h].length)));
   const fmt = (vals: string[]) => vals.map((v, i) => v.padEnd(widths[i])).join("  ");
   console.log(fmt(headers));
   console.log(fmt(widths.map((w) => "─".repeat(w))));
   for (const r of rows) console.log(fmt(headers.map((h) => (r as any)[h])));
+  console.log(`\n共 ${sessions.length} 个匹配${running > 0 ? `，${running} 个 running` : ""}${erroredCount > 0 ? `，${erroredCount} 个有错误(⚠，logs <sid> --errors 查看)` : ""}（默认隐藏 closed，--all 显示全部）`);
 }
 
 async function cmdSend(args: string[]): Promise<void> {
@@ -144,32 +237,90 @@ async function cmdSend(args: string[]): Promise<void> {
 }
 
 async function cmdCancel(args: string[]): Promise<void> {
-  const sid = await resolveSid(args[0]);
+  const { positional, flags } = parseFlags(args);
+  const { filter, hasFilter } = buildFilter(flags);
+  if (hasFilter && !positional[0]) {
+    const targets = await listSessionsFiltered(filter);
+    if (!await confirmBatch("cancel", targets, !!flags.yes, !!flags.json)) return;
+    for (const m of targets) { try { await cancelSession(m.sid); } catch { /* skip */ } }
+    if (!flags.json) console.log(`✓ 已中止 ${targets.length} 个`);
+    return;
+  }
+  const sid = await resolveSid(positional[0]);
   await cancelSession(sid);
   console.log(`✓ 已中止 ${sid.slice(0, 8)}`);
 }
 
 async function cmdClose(args: string[]): Promise<void> {
   const { positional, flags } = parseFlags(args);
+  const { filter, hasFilter } = buildFilter(flags);
+  if (hasFilter && !positional[0]) {
+    const targets = await listSessionsFiltered(filter);
+    if (!await confirmBatch(flags.purge ? "close+purge" : "close", targets, !!flags.yes, !!flags.json)) return;
+    for (const m of targets) { try { await closeSession(m.sid, !!flags.purge); } catch { /* skip */ } }
+    if (!flags.json) console.log(`✓ 已关闭 ${targets.length} 个${flags.purge ? "（已删除目录）" : ""}`);
+    return;
+  }
   const sid = await resolveSid(positional[0]);
   await closeSession(sid, !!flags.purge);
   console.log(`✓ 已关闭 ${sid.slice(0, 8)}${flags.purge ? "（已删除目录）" : ""}`);
 }
 
+/** 批量操作前列出目标并确认（--yes 跳过；--json 不交互直接执行） */
+async function confirmBatch(action: string, targets: { sid: string; name: string; status: string }[], yes: boolean, json: boolean): Promise<boolean> {
+  if (targets.length === 0) { if (!json) console.log("(无匹配 session)"); return false; }
+  if (json || yes) return true;
+  console.log(`将对以下 ${targets.length} 个 session 执行 ${action}：`);
+  for (const m of targets) console.log(`  ${m.sid.slice(0, 8)}  ${m.name}  [${m.status}]`);
+  process.stdout.write(`确认？(y/N) `);
+  const rl = await import("node:readline/promises");
+  const iface = rl.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const ans = await iface.question("");
+    return /^y(es)?$/i.test(ans.trim());
+  } finally { iface.close(); }
+}
+
 async function cmdShow(args: string[]): Promise<void> {
   const { positional, flags } = parseFlags(args);
   const sid = await resolveSid(positional[0]);
-  const lines = typeof flags.lines === "string" ? parseInt(flags.lines, 10) : 30;
+  const errorsOnly = !!flags["errors-only"] || !!flags.errors;
+  const lines = typeof flags.lines === "string" ? parseInt(flags.lines, 10) : (errorsOnly ? 10000 : 30);
   const mode: PrintMode = flags.json ? "json" : "human";
   const data = await showSession(sid, lines);
   if (!data) { console.error(`session ${sid} 不存在`); process.exit(1); }
-  if (mode === "json") { process.stdout.write(JSON.stringify({ meta: data.meta, alive: data.alive, log: data.log.map(toLeanFrame) }, null, 2) + "\n"); return; }
+  let log = data.log;
+  if (errorsOnly) log = log.filter((f) => f.kind === "error" || (f.kind === "tool_result" && toolResultFailed(f.output)));
+  if (mode === "json") { process.stdout.write(JSON.stringify({ meta: data.meta, alive: data.alive, log: log.map(toLeanFrame) }, null, 2) + "\n"); return; }
   const m = data.meta;
   console.log(`# ${m.sid.slice(0, 8)}  ${m.backend}${m.model ? ` ${m.model}` : ""}`);
   console.log(`name=${m.name}  status=${m.status}  turns=${m.turnCount}  approval=${m.approvalMode ?? "yolo"}  alive=${data.alive}`);
   console.log(`workdir=${m.workdir}`);
-  console.log(`\n--- log (${data.log.length}) ---`);
-  for (const f of data.log) printFrame(f, mode);
+  console.log(`\n--- ${errorsOnly ? "errors" : "log"} (${log.length}) ---`);
+  if (errorsOnly && log.length === 0) { console.log("(无错误帧)"); return; }
+  for (const f of log) printFrame(f, mode, { expandError: errorsOnly });
+}
+
+/** logs：dump 完整 log.ndjson（不经 tail 截断），适合管道 grep / 贴给上层 LLM */
+async function cmdLogs(args: string[]): Promise<void> {
+  const { positional, flags } = parseFlags(args);
+  const sid = await resolveSid(positional[0]);
+  if (!existsSync(logPath(sid))) { console.error(`session ${sid} 不存在`); process.exit(1); }
+  const errorsOnly = !!flags.errors;
+  const raw = (await import("node:fs/promises")).readFile;
+  const text = await raw(logPath(sid), "utf-8");
+  const lines = text.split("\n").filter(Boolean);
+  let hadError = false;
+  for (const line of lines) {
+    let f: NormalizedFrame;
+    try { f = JSON.parse(line); } catch { continue; }
+    const isErr = f.kind === "error" || (f.kind === "tool_result" && toolResultFailed((f as any).output));
+    if (isErr) hadError = true;
+    if (errorsOnly && !isErr) continue;
+    if (flags.json) { process.stdout.write(line + "\n"); }
+    else printFrame(f, "verbose", { expandError: true });
+  }
+  if (errorsOnly && !hadError && !flags.json) console.log("(无错误帧)");
 }
 
 async function cmdAttach(args: string[]): Promise<void> {
@@ -200,7 +351,7 @@ async function cmdAttach(args: string[]): Promise<void> {
   await new Promise<void>((resolve) => { process.on("SIGINT", () => { clearInterval(poll); resolve(); }); });
 }
 
-async function cmdPurge(): Promise<void> { const n = await purgeDead(); console.log(`✓ 清理了 ${n} 个 session`); }
+async function cmdPurge(): Promise<void> { const n = await purgeDead(); console.log(`✓ 清理了 ${n} 个 closed/dead session`); }
 
 async function cmdApprove(args: string[]): Promise<void> {
   const { positional, flags } = parseFlags(args);
