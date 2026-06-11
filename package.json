@@ -1,6 +1,6 @@
 {
   "name": "tako-cli",
-  "version": "0.2.59",
+  "version": "0.3.0",
   "description": "Tako CLI - AI coding tools launcher",
   "type": "module",
   "bin": {
