@@ -25,7 +25,8 @@ import { ProviderPicker, GroupPicker } from "./LauncherPickers";
 const VERSION = process.env.VERSION || "dev";
 
 export type LauncherResult =
-  | { type: "launch"; clientId: string; projectPath?: string; args: string[]; selectedOptionIds: string[] }
+  | { type: "launch"; clientId: string; projectPath?: string; args: string[]; envVars: Record<string, string>; selectedOptionIds: string[] }
+  | { type: "agent" }
   | { type: "stats" }
   | { type: "config" }
   | { type: "language" }
@@ -394,6 +395,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
     }
 
     if (input === "q") { onResult({ type: "exit" }); return; }
+    if (input === "a") { onResult({ type: "agent" }); return; }
     if (input === "s") { onResult({ type: "stats" }); return; }
     if (input === "c") { onResult({ type: "config" }); return; }
     if (input === "l") { onResult({ type: "language" }); return; }
@@ -477,11 +479,12 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
       // 启动
       const project = projects[projectIdx];
       const args: string[] = [];
+      const envVars: Record<string, string> = {};
       const selectedOptionIds: string[] = [];
       for (const opt of options) {
-        if (enabled.has(opt.id)) { args.push(...opt.args); selectedOptionIds.push(opt.id); }
+        if (enabled.has(opt.id)) { args.push(...opt.args); if (opt.envVars) Object.assign(envVars, opt.envVars); selectedOptionIds.push(opt.id); }
       }
-      onResult({ type: "launch", clientId: current.client.id, projectPath: project.path, args, selectedOptionIds });
+      onResult({ type: "launch", clientId: current.client.id, projectPath: project.path, args, envVars, selectedOptionIds });
     }
   }, [focus, clientIdx, projectIdx, optionIdx, provIdx, provs, currentProv, current, projects, options, optionRows, enabled, clients, onResult, zh, pickingGroup, pickingProvider, pickerIdx]));
 
@@ -660,6 +663,8 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
         ) : (
           <>
             <Text dimColor bold>Enter</Text><Text dimColor>{zh ? "启动" : "launch"}</Text>
+            <Text dimColor>│</Text>
+            <Text dimColor bold>a</Text><Text dimColor>agent</Text>
             <Text dimColor>│</Text>
             <Text dimColor bold>↑↓</Text><Text dimColor>{zh ? "选择" : "select"}</Text>
             <Text dimColor>│</Text>

@@ -1,68 +1,63 @@
-export type McpEnvVar = {
-    name: string;
-    value: string;
-};
+export type Backend = "claude" | "codex";
 
-export type McpServerStdio = {
-    name: string;
-    command: string;
-    args: string[];
-    env: McpEnvVar[];
-};
+export type SessionStatus =
+  | "idle"
+  | "running"
+  | "awaiting_approval"
+  | "closed"
+  | "dead";
 
-export type AgentSessionConfig = {
-    cwd: string;
-    mcpServers: McpServerStdio[];
-};
+export type ApprovalMode = "yolo" | "external";
 
-export type PromptContent = {
-    type: 'text';
-    text: string;
-};
-
-export type PlanItem = {
-    content: string;
-    priority: 'high' | 'medium' | 'low';
-    status: 'pending' | 'in_progress' | 'completed';
-};
-
-export type AgentMessage =
-    | { type: 'text'; text: string }
-    | { type: 'tool_call'; id: string; name: string; input: unknown; status: 'pending' | 'in_progress' | 'completed' | 'failed' }
-    | { type: 'tool_result'; id: string; output: unknown; status: 'completed' | 'failed' }
-    | { type: 'plan'; items: PlanItem[] }
-    | { type: 'turn_complete'; stopReason: string }
-    | { type: 'error'; message: string };
-
-export type PermissionOption = {
-    optionId: string;
-    name: string;
-    kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always' | string;
-};
-
-export type PermissionRequest = {
-    id: string;
-    sessionId: string;
-    toolCallId: string;
-    title?: string;
-    kind?: string;
-    rawInput?: unknown;
-    rawOutput?: unknown;
-    options: PermissionOption[];
-};
-
-export type PermissionResponse =
-    | { outcome: 'selected'; optionId: string }
-    | { outcome: 'cancelled' };
-
-export interface AgentBackend {
-    initialize(): Promise<void>;
-    newSession(config: AgentSessionConfig): Promise<string>;
-    prompt(sessionId: string, content: PromptContent[], onUpdate: (msg: AgentMessage) => void): Promise<void>;
-    cancelPrompt(sessionId: string): Promise<void>;
-    respondToPermission(sessionId: string, request: PermissionRequest, response: PermissionResponse): Promise<void>;
-    onPermissionRequest(handler: (request: PermissionRequest) => void): void;
-    disconnect(): Promise<void>;
+export interface SessionMeta {
+  sid: string;
+  backend: Backend;
+  name: string;
+  model?: string;
+  workdir: string;
+  status: SessionStatus;
+  approvalMode?: ApprovalMode;
+  turnCount: number;
+  createdAt: number;
+  lastActiveAt: number;
+  providerId?: string;
+  codexThreadId?: string;
+  codexPid?: number;
+  codexSocket?: string;
 }
 
-export type AgentBackendFactory = () => AgentBackend;
+export type NormalizedFrame =
+  | { ts: number; kind: "session_started"; sid: string; backend: Backend; model?: string }
+  | { ts: number; kind: "turn_started"; turnId: string }
+  | { ts: number; kind: "text_delta"; text: string; itemId?: string }
+  | { ts: number; kind: "tool_use"; name: string; input: unknown; itemId?: string }
+  | { ts: number; kind: "tool_result"; itemId?: string; output: unknown }
+  | { ts: number; kind: "reasoning_delta"; text: string }
+  | { ts: number; kind: "approval_required"; approvalId: string | number; approvalType: "exec" | "patch" | "permission" | "tool" | "other"; params: unknown }
+  | { ts: number; kind: "turn_completed"; turnId?: string; stopReason?: string; usage?: unknown }
+  | { ts: number; kind: "error"; message: string; raw?: unknown }
+  | { ts: number; kind: "session_closed" };
+
+export interface Driver {
+  readonly backend: Backend;
+  start(opts: StartOpts): Promise<SessionMeta>;
+  send(meta: SessionMeta, prompt: string, hooks?: SendHooks): Promise<SessionMeta>;
+  cancel(meta: SessionMeta): Promise<void>;
+  close(meta: SessionMeta): Promise<void>;
+  isAlive(meta: SessionMeta): Promise<boolean>;
+}
+
+export interface StartOpts {
+  sid: string;
+  name: string;
+  model?: string;
+  workdir: string;
+  approvalMode?: ApprovalMode;
+  env: Record<string, string>;
+  providerHint?: { type: string; apiKey?: string; baseUrl?: string };
+  providerId?: string;
+}
+
+export interface SendHooks {
+  onFrame?: (frame: NormalizedFrame) => void;
+}

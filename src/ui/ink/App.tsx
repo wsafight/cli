@@ -16,9 +16,10 @@ import { ApiKeyInputView } from "./views/ApiKeyInputView";
 import { LanguageSelectView } from "./views/LanguageSelectView";
 import { KeySetupGuide, shouldShowKeyGuide, dismissKeyGuide, type GuideAction } from "./views/KeySetupGuide";
 import { ClientVersionView } from "./views/ClientVersionView";
+import { AgentsView } from "./views/AgentsView";
 import { setLogHandler, resetLogHandler } from "../../logger";
 
-type View = "launcher" | "providers" | "stats" | "config" | "language" | "key-guide" | "client-versions";
+type View = "launcher" | "providers" | "stats" | "config" | "language" | "key-guide" | "client-versions" | "agents";
 
 interface LogEntry { id?: number; text: string; type: "info" | "warn" | "error" | "success" | "spin" }
 
@@ -98,6 +99,7 @@ function App({ onLaunch, onExit, initialView = "launcher" }: AppProps) {
             onResult={(result) => {
               switch (result.type) {
                 case "launch": onLaunch(result); break;
+                case "agent": setView("agents"); break;
                 case "providers": setView("providers"); break;
                 case "stats": setView("stats"); break;
                 case "config": setView("config"); break;
@@ -112,6 +114,8 @@ function App({ onLaunch, onExit, initialView = "launcher" }: AppProps) {
           if (action === "client-versions") setView("client-versions");
           else goBack();
         }} />;
+      case "agents":
+        return <AgentsView onDone={goBack} />;
       case "client-versions":
         return <ClientVersionView onDone={() => setView("providers")} />;
       case "stats":

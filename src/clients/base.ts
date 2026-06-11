@@ -27,6 +27,8 @@ export interface LaunchOption {
   flag: string;
   /** Actual CLI arguments to pass */
   args: string[];
+  /** Environment variables to set (merged into process env at launch) */
+  envVars?: Record<string, string>;
   /** Mutual exclusion group — options in the same group cannot be selected together */
   group?: string;
 }

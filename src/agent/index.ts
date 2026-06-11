@@ -1,7 +1,13 @@
-export * from './types';
-export * from './AgentRegistry';
-export * from './messageConverter';
-export * from './utils';
-export * from './localLaunchPolicy';
-export { runAgent } from './runAgent';
-export { runAgentCommand } from './command';
+export * from "./types";
+export { runAgentCommand } from "./cmd";
+export {
+  startSession,
+  sendToSession,
+  cancelSession,
+  closeSession,
+  listAllSessions,
+  showSession,
+  purgeDead,
+  setAgentDefault,
+  getAgentDefaults,
+} from "./manager";

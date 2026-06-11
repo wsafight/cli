@@ -99,8 +99,7 @@ async function detectByNetwork(): Promise<Region> {
 
   inflightNetworkDetect = (async () => {
     const NET_TIMEOUT = 1200;
-    const tasks = [detectByIpApi, detectByIpInfo, detectByIpSb].map((fn) =>
-      // 把 null/失败转成 reject，让 Promise.any 跳过它们
+    const tasks = [detectByIpApi, detectByIpInfo, detectByIpSb, detectByIpCn].map((fn) =>
       fn().then((r) => (r ? r : Promise.reject(new Error("null"))))
     );
 
@@ -207,6 +206,49 @@ async function detectByIpSb(): Promise<"cn" | "global" | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * 使用国内 API 检测（国内网络下响应最快）
+ * 并发 3 个国内源竞速，任一返回即确认
+ */
+async function detectByIpCn(): Promise<"cn" | "global" | null> {
+  const sources = [
+    // ipip.net — 182ms，JSON 格式清晰
+    async (): Promise<"cn" | "global" | null> => {
+      const res = await fetch("https://myip.ipip.net/json", { signal: AbortSignal.timeout(800) });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const loc = data?.data?.location;
+      if (Array.isArray(loc) && loc[0] === "中国") return "cn";
+      const code = data?.data?.country_code;
+      return code === "CN" ? "cn" : code ? "global" : null;
+    },
+    // pconline — 166ms，proCode 330000 = 浙江等大陆省份
+    async (): Promise<"cn" | "global" | null> => {
+      const res = await fetch("https://whois.pconline.com.cn/ipJson.jsp?json=true", { signal: AbortSignal.timeout(800) });
+      if (!res.ok) return null;
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text.trim());
+        // proCode 是 6 位数字（大陆省份编码），有值 = 国内
+        if (data.proCode && /^\d{6}$/.test(data.proCode)) return "cn";
+      } catch { /* 编码问题 parse 失败 */ }
+      return null;
+    },
+    // ip.3322.net — 104ms，只返回 IP；能连通即证明国内（该域名海外几乎不通）
+    async (): Promise<"cn" | "global" | null> => {
+      const res = await fetch("http://ip.3322.net/api/", { signal: AbortSignal.timeout(600) });
+      if (!res.ok) return null;
+      const ip = (await res.text()).trim();
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) return "cn";
+      return null;
+    },
+  ];
+
+  try {
+    return await Promise.any(sources.map((fn) => fn().then((r) => r ?? Promise.reject())));
+  } catch { return null; }
 }
 
 /**

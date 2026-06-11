@@ -78,6 +78,10 @@ export async function installAtVersion(client: ClientConfig, version: string): P
   }
 
   const registry = await getNpmRegistry();
+  const { detectRegion } = await import("./region");
+  const region = await detectRegion();
+  const { log } = await import("./logger");
+  log.info(`网络环境: ${region === "cn" ? "国内" : "海外"} | registry: ${registry}`);
   const proc = Bun.spawn([TAKO_BUN_BIN, "add", `${client.package}@${version}`], {
     cwd: clientDir,
     stdout: "pipe",

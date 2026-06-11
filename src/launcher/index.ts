@@ -16,6 +16,7 @@ import { launchClient as legacyLaunchClient } from "../launcher-legacy";
 export interface LaunchOptions {
   projectPath?: string;
   args?: string[];
+  envVars?: Record<string, string>;
   selectedOptionIds?: string[];
   /** 调用方直接指定的 Provider（跳过选择） */
   providerContext?: ProviderContext;

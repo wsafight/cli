@@ -307,7 +307,8 @@ function buildDynamicClaudeModels(provider: Provider): LaunchOption[] | null {
         zh: `使用 ${e.displayName}（上下文 ${ctxStrOf(e.contextWindow)}）`,
       },
       flag: `--model ${modelArg}`,
-      args: ["--model", modelArg],
+      args: [],
+      envVars: { ANTHROPIC_MODEL: modelArg },
       group: "model",
     };
   });
@@ -344,7 +345,8 @@ function buildModelOptions(provider?: Provider): LaunchOption[] {
         zh: `使用 ${pretty}（上下文 ${ctxStr}）`,
       },
       flag: `--model ${modelArg}`,
-      args: ["--model", modelArg],
+      args: [],
+      envVars: { ANTHROPIC_MODEL: modelArg },
       group: "model",
     });
   }

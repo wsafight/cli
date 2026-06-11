@@ -5,6 +5,7 @@ import { getBunPath } from "./installer";
 export interface LaunchOptions {
   projectPath?: string;
   args?: string[];
+  envVars?: Record<string, string>;
   selectedOptionIds?: string[];
   providerContext?: ProviderContext;
 }
@@ -37,7 +38,7 @@ export async function launchClient(
     }
 
     const clientEnvVars = client.getEnvVars(providerContext);
-    const env = { ...process.env, ...clientEnvVars };
+    const env = { ...process.env, ...clientEnvVars, ...(options?.envVars ?? {}) };
 
     let command: string[];
     if (client.runtime === "native") {

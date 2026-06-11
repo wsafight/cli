@@ -33,6 +33,12 @@ ${t("cli.shortcutClaude")}
 ${t("cli.shortcutCodex")}
 ${t("cli.shortcutGemini")}
 
+Commands:
+  tako install <client>     Install AI coding tool
+  tako agent [--model X]    Start agent mode
+  tako skill list           List available skills
+  tako skill install <name> Install skill to current project
+
 ${t("cli.examples")}
 ${t("cli.exampleInteractive")}
 ${t("cli.exampleClaude")}
@@ -131,11 +137,18 @@ async function run() {
     return;
   }
 
-  // agent 命令：tako agent [--model <model>] [--yolo]
+  // agent 命令：tako agent <subcmd> [...]
   if (args[0] === "agent") {
     loadCatalog();
-    const { runAgentCommand } = await import("./agent/command");
+    const { runAgentCommand } = await import("./agent/cmd");
     await runAgentCommand(args.slice(1));
+    return;
+  }
+
+  // skill 命令：tako skill list | tako skill install <name|--all>
+  if (args[0] === "skill") {
+    const { runSkillCommand } = await import("./skills/command");
+    await runSkillCommand(args.slice(1));
     return;
   }
 

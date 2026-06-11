@@ -714,6 +714,8 @@ export async function installClient(
 
     // 根据地区选择 npm registry
     const registry = await getNpmRegistry();
+    const region = await detectRegion();
+    log.info(`网络环境: ${region === "cn" ? "国内（npmmirror）" : "海外"} | registry: ${registry}`);
 
     // 如果是更新，删除 lockfile 确保能更新到最新版本
     if (isInstalled) {

@@ -39,6 +39,8 @@ export async function main(): Promise<void> {
     if (!result) break; // exit
 
     // launch — Ink 已 unmount，处理启动
+    if (result.type === "agent") continue; // handled inside Ink
+
     const client = getClient(result.clientId);
     if (!client) continue;
 
@@ -53,6 +55,7 @@ export async function main(): Promise<void> {
     const launchResult = await launchClientUnified(client, {
       projectPath: result.projectPath,
       args: result.args,
+      envVars: result.envVars,
       selectedOptionIds: result.selectedOptionIds,
       providerContext,
     });

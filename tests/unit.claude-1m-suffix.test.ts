@@ -86,8 +86,9 @@ describe("Claude Code launchOptions 自动带 [1m]", () => {
     expect(opus47).toBeDefined();
     // option.id 保留无后缀（持久化稳定）
     expect(opus47!.id).toBe("model-claude-opus-4-7");
-    // 但实际命令行参数带 [1m]
-    expect(opus47!.args).toEqual(["--model", "claude-opus-4-7[1m]"]);
+    // 模型通过环境变量传递，不用 --model 参数（避免 Claude Code 持久化到全局设置）
+    expect(opus47!.envVars).toEqual({ ANTHROPIC_MODEL: "claude-opus-4-7[1m]" });
+    expect(opus47!.args).toEqual([]);
     expect(opus47!.flag).toBe("--model claude-opus-4-7[1m]");
   });
 
@@ -95,14 +96,25 @@ describe("Claude Code launchOptions 自动带 [1m]", () => {
     const opts = getClientLaunchOptions(claudeCodeClient, fakeProvider({ type: "deepseek" }));
     const flash = opts.find((o) => o.id === "model-deepseek-v4-flash");
     expect(flash).toBeDefined();
-    expect(flash!.args).toEqual(["--model", "deepseek-v4-flash[1m]"]);
+    expect(flash!.envVars).toEqual({ ANTHROPIC_MODEL: "deepseek-v4-flash[1m]" });
   });
 
   it("Xiaomi MiMo provider 下 mimo-v2.5-pro 也加 [1m]", () => {
     const opts = getClientLaunchOptions(claudeCodeClient, fakeProvider({ type: "xiaomi" }));
     const pro = opts.find((o) => o.id === "model-mimo-v2.5-pro");
     expect(pro).toBeDefined();
-    expect(pro!.args).toEqual(["--model", "mimo-v2.5-pro[1m]"]);
+    expect(pro!.envVars).toEqual({ ANTHROPIC_MODEL: "mimo-v2.5-pro[1m]" });
+  });
+
+  it("模型选项不传 --model 参数（避免 Claude Code 持久化全局设置）", () => {
+    const opts = getClientLaunchOptions(claudeCodeClient, fakeProvider({ type: "tako" }));
+    const modelOpts = opts.filter((o) => o.group === "model");
+    expect(modelOpts.length).toBeGreaterThan(0);
+    for (const opt of modelOpts) {
+      expect(opt.args).toEqual([]);
+      expect(opt.envVars).toBeDefined();
+      expect(opt.envVars!.ANTHROPIC_MODEL).toBeTruthy();
+    }
   });
 });
 
