@@ -13,6 +13,47 @@
 
 ---
 
+## Why Tako? / 为什么用 Tako
+
+- 🚀 **One launcher, every tool** — switch between Claude Code, Codex, Gemini in one TUI; no more juggling separate installs / 一个启动器管所有工具，不用分别折腾安装
+- 🤖 **Multi-agent sessions** — run, monitor, and approve persistent agent sessions from the CLI; perfect for fan-out tasks / 多 agent 会话，CLI 里批量派活/监控/审批，适合并行任务
+- 🔄 **Per-session model switching** — swap models via env var without polluting global config / 按会话切模型，不污染全局配置
+- 🔌 **Provider-agnostic** — Tako API, Anthropic, DeepSeek, Xiaomi, or your own endpoint / 任意服务商，含自定义端点
+- 🇨🇳 **China-optimized** — auto mirror detection + npmmirror acceleration / 自动镜像检测加速
+
+## Table of Contents / 目录
+
+- [Quick Install / 快速安装](#quick-install--快速安装)
+- [Usage / 使用方式](#usage--使用方式)
+- [Agent Session Management / Agent 会话管理](#agent-session-management--agent-会话管理)
+- [Skills / 技能](#skills--技能)
+- [Features / 功能特性](#features--功能特性)
+- [Documentation / 文档](#documentation--文档)
+- [Development / 开发](#development--开发)
+
+## What it looks like / 效果一览
+
+```console
+$ tako
+🐙 Tako — AI Coding Tools Launcher
+
+  ▸ Claude Code   claude-sonnet-4-6   ● ready
+    Codex         gpt-5.5             ● ready
+    Gemini        gemini-2.5-pro      ● ready
+
+  [←→] switch   [↑↓] projects   [a] agents   [p] providers   [Enter] launch
+
+$ tako agent run claude --name fix-tests --json \
+    --prompt "find and fix the failing auth tests"
+→ run a1b2c3d4 (claude claude-sonnet-4-6)
+  $ go test ./...
+  ✗ FAILED (exit 1)
+◀ turn done
+{"sid":"a1b2c3d4-...","status":"ok","text":"Fixed 2 tests in auth_test.go"}
+```
+
+---
+
 ## Quick Install / 快速安装
 
 ```bash
@@ -59,10 +100,12 @@ Manage persistent AI agent sessions from CLI or TUI. Sessions survive shell rest
 从 CLI 或 TUI 管理持久化的 AI agent 会话。会话跨 shell 重启保持。
 
 ```bash
+tako agent run claude --prompt "fix the failing tests" --json  # One-shot task / 一次性任务
 tako agent start claude --model claude-sonnet-4-6   # Create session / 创建会话
-tako agent list                                      # List sessions / 列出会话
+tako agent list [--status idle --name-prefix fg-]    # List + filter / 列出+筛选
 tako agent send <sid> "your prompt"                  # Send message / 发送消息
 tako agent attach <sid>                              # Live-tail log / 实时跟踪
+tako agent show <sid> --errors-only                  # Inspect failures / 查看失败详情
 tako agent cancel <sid>                              # Cancel current turn / 中止当前轮
 tako agent close <sid> [--purge]                     # Close session / 关闭会话
 ```
@@ -136,6 +179,18 @@ curl -fsSL https://raw.githubusercontent.com/tako-dev/cli/main/skills/model-benc
 
 ---
 
+## Documentation / 文档
+
+| Topic | Link |
+|-------|------|
+| 📖 Agent module design / Agent 模块设计 | [`docs/agent/DESIGN.md`](docs/agent/DESIGN.md) |
+| 🧪 Agent test plan / 测试计划 | [`docs/agent/TESTPLAN.md`](docs/agent/TESTPLAN.md) |
+| 🤖 tako-agent skill | [`skills/tako-agent/SKILL.md`](skills/tako-agent/SKILL.md) |
+| 📊 Model benchmark & picker / 选模型指南 | [`skills/model-benchmark/SKILL.md`](skills/model-benchmark/SKILL.md) |
+| 🐛 Issues & feedback | [GitHub Issues](https://github.com/tako-dev/cli/issues) |
+
+---
+
 ## Development / 开发
 
 ```bash
@@ -143,6 +198,8 @@ bun install
 bun run build
 bun test
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow. / 完整流程见 CONTRIBUTING.md。
 
 ---
 

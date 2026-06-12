@@ -1,8 +1,17 @@
 {
   "name": "tako-cli",
   "version": "0.3.1",
-  "description": "Tako CLI - AI coding tools launcher",
+  "description": "Tako CLI — unified launcher for AI coding tools (Claude Code, Codex, Gemini) with multi-agent session management",
   "type": "module",
+  "homepage": "https://github.com/tako-dev/cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tako-dev/cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tako-dev/cli/issues"
+  },
+  "author": "Barrierml",
   "bin": {
     "tako": "./dist/index.js"
   },
@@ -33,7 +42,17 @@
     "cli",
     "ai",
     "claude",
-    "codex"
+    "claude-code",
+    "codex",
+    "gemini-cli",
+    "ai-agent",
+    "coding-agent",
+    "llm",
+    "tui",
+    "terminal",
+    "deepseek",
+    "developer-tools",
+    "ai-coding"
   ],
   "license": "MIT",
   "dependencies": {
