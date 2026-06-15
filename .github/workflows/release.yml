@@ -1,0 +1,74 @@
+name: CLI release
+
+# 打 tag 触发：git tag v0.x.y && git push --tags
+# 流程：e2e 三平台全过 → build → npm publish
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  # ─── 阶段 1：三平台 e2e gate ───
+  e2e:
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install CLI deps
+        run: bun install
+
+      - name: Prepare TAKO_HOME with system bun
+        shell: bash
+        env:
+          TAKO_HOME: ${{ runner.temp }}/tako-e2e
+        run: |
+          mkdir -p "$TAKO_HOME/bun/bin"
+          BUN_PATH="$(which bun)"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp "$BUN_PATH" "$TAKO_HOME/bun/bin/bun.exe"
+          else
+            ln -sf "$BUN_PATH" "$TAKO_HOME/bun/bin/bun"
+          fi
+
+      - name: Run installer e2e
+        env:
+          TAKO_HOME: ${{ runner.temp }}/tako-e2e
+        run: bun tests/e2e/installer-driver.ts
+
+  # ─── 阶段 2：build + publish（e2e 全过后）───
+  publish:
+    needs: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install deps
+        run: bun install
+
+      - name: Build
+        run: bun run build
+
+      - name: Pre-release checks
+        run: bun run test:pre-release
+
+      - name: Publish to npm
+        run: npm publish --registry https://registry.npmjs.org
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
