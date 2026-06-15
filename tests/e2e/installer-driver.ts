@@ -8,10 +8,8 @@
  * exit 0 = 全部通过，exit 1 = 有失败。
  */
 import { join } from "path";
-import { mkdtemp } from "fs/promises";
-import { tmpdir } from "os";
 import { TAKO_DIR, TOOLS_DIR, TAKO_BUN_CACHE_DIR } from "../../src/config";
-import { installClient, isClientInstalled, isPackageInstalledAt, ensureBunInstalled } from "../../src/installer";
+import { installClient, isClientInstalled, ensureBunInstalled } from "../../src/installer";
 import { getClient } from "../../src/clients/base";
 
 // 注册 clients
@@ -44,19 +42,19 @@ async function run() {
   const result = await installClient(client);
   check("fresh-install-success", result.success, result.error);
 
+  // 平台二进制（跨平台查找）
   const fs = await import("fs/promises");
   const pkgJson = join(clientDir, "node_modules", client.package, "package.json");
   const pkgExists = await Bun.file(pkgJson).exists();
   check("pkg-entry-exists", pkgExists);
 
-  // 平台二进制（查找 vendor 下的 codex 可执行文件）
-  const { execSync } = await import("child_process");
+  const binaryName = process.platform === "win32" ? "codex.exe" : "codex";
   let binSize = 0;
   try {
-    const found = execSync(`find ${clientDir}/node_modules/@openai -name codex -type f`, { encoding: "utf8" }).trim();
-    if (found) {
-      const stat = await fs.stat(found.split("\n")[0]);
-      binSize = stat.size;
+    const glob = new Bun.Glob(`**/node_modules/@openai/**/${binaryName}`);
+    for await (const path of glob.scan({ cwd: clientDir, onlyFiles: true })) {
+      const stat = await fs.stat(join(clientDir, path));
+      if (stat.size > binSize) binSize = stat.size;
     }
   } catch {}
   check("native-binary-exists", binSize > 1_000_000, `${Math.round(binSize / 1e6)}MB`);
