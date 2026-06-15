@@ -1,11 +1,12 @@
 import { homedir } from "os";
-import { join } from "path";
+import { join, resolve } from "path";
 
 // Tako 配置目录
 // TAKO_HOME 环境变量可覆盖根目录（默认 ~/.tako）。
 // 用途：e2e 测试隔离（容器/子进程内指向临时目录，不污染真实 ~/.tako），
 // 以及高级用户自定义 tako 目录。未设置时行为与旧版完全一致（向后兼容）。
-export const TAKO_DIR = process.env.TAKO_HOME || join(homedir(), ".tako");
+// resolve() 规范化路径分隔符（Windows 上混 / 和 \ 会导致 startsWith 断言失败）。
+export const TAKO_DIR = resolve(process.env.TAKO_HOME || join(homedir(), ".tako"));
 export const CONFIG_PATH = join(TAKO_DIR, "config.json");
 export const TOOLS_DIR = join(TAKO_DIR, "tools");
 
