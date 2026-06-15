@@ -160,7 +160,7 @@ async function run() {
   const homedir = (await import("os")).homedir();
   const codexConfigPath = join(homedir, ".codex", "config.toml");
   if (codexClient.setupConfigFiles) {
-    await codexClient.setupConfigFiles({ type: "tako", baseUrl: "https://test.example.com" });
+    await codexClient.setupConfigFiles({ type: "custom", baseUrl: "https://test.example.com" });
     const configExists = await Bun.file(codexConfigPath).exists();
     check("codex-config-written", configExists);
     if (configExists) {
