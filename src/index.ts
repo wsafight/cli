@@ -196,6 +196,15 @@ async function run() {
   loadCatalog();
   refreshCatalog().catch(() => {});
 
+  // 交互式 TUI 需要 TTY（stdin raw mode）。pipe / 非终端环境无法运行。
+  if (!process.stdin.isTTY) {
+    console.log("Tako CLI v" + VERSION);
+    console.log("\n安装成功！请在终端中直接运行 tako 启动交互界面。");
+    console.log("  tako          — 交互式启动器");
+    console.log("  tako --help   — 查看所有命令");
+    return;
+  }
+
   // 运行 Ink TUI 主程序
   await main();
 }
