@@ -2,11 +2,19 @@
 /**
  * 构建脚本 - 打包为 JS bundle
  */
+import { mkdirSync, writeFileSync } from "fs";
 
 const pkg = await Bun.file("package.json").json();
 const version = pkg.version;
 
 console.log(`Building Tako CLI v${version}...`);
+
+// Stub react-devtools-core（ink 的 optional devDependency，15MB，只在 dev 模式用）
+// 创建空 stub 让 bundler resolve + inline，运行时 ink 的 try/catch 会静默跳过
+const stubDir = "node_modules/react-devtools-core";
+mkdirSync(stubDir, { recursive: true });
+writeFileSync(`${stubDir}/index.js`, "export default {initialize(){},connectToDevTools(){}};");
+writeFileSync(`${stubDir}/package.json`, '{"name":"react-devtools-core","version":"0.0.0","main":"index.js"}');
 
 const result = await Bun.build({
   entrypoints: ["src/index.ts"],
@@ -14,7 +22,6 @@ const result = await Bun.build({
   naming: "index.js",
   minify: true,
   target: "bun",
-  external: ["react-devtools-core"],
   define: {
     "process.env.VERSION": JSON.stringify(version),
   },
