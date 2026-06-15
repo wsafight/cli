@@ -52,7 +52,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      id-token: write  # OIDC Trusted Publishing 必须
+      contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +61,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
 
       - name: Install deps
         run: bun install
@@ -70,5 +76,7 @@ jobs:
       - name: Pre-release checks
         run: bun run test:pre-release
 
-      - name: Publish to npm (OIDC)
-        run: npm publish --registry https://registry.npmjs.org --provenance
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
