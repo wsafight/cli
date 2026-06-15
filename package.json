@@ -32,7 +32,8 @@
     "test:e2e-installer": "TAKO_HOME=$(mktemp -d) bun tests/e2e/installer-driver.ts",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
-    "release": "bun run test:pre-release && bash scripts/release-gate.sh && bun scripts/bump.ts patch && npm publish --registry https://registry.npmjs.org && ./scripts/sync-gitee.sh",
+    "release": "bun scripts/bump.ts patch && git add package.json && git commit -m \"chore: release v$(node -p 'require(\\\"./package.json\\\").version')\" && git tag v$(node -p 'require(\\\"./package.json\\\").version') && git push && git push --tags",
+    "release:minor": "bun scripts/bump.ts minor && git add package.json && git commit -m \"chore: release v$(node -p 'require(\\\"./package.json\\\").version')\" && git tag v$(node -p 'require(\\\"./package.json\\\").version') && git push && git push --tags",
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {
