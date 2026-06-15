@@ -51,6 +51,8 @@ jobs:
     needs: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      id-token: write  # OIDC Trusted Publishing 必须
 
     steps:
       - uses: actions/checkout@v4
@@ -68,12 +70,5 @@ jobs:
       - name: Pre-release checks
         run: bun run test:pre-release
 
-      - name: Configure npm auth
-        run: echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish to npm
-        run: npm publish --registry https://registry.npmjs.org
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to npm (OIDC)
+        run: npm publish --registry https://registry.npmjs.org --provenance
