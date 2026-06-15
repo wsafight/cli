@@ -75,6 +75,12 @@ jobs:
       - name: Build
         run: bun run build
 
+      - name: Smoke test built bundle
+        run: |
+          OUTPUT=$(bun dist/index.js --version)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Tako CLI" || (echo "FAIL: bundle cannot start" && exit 1)
+
       - name: Pre-release checks
         run: bun run test:pre-release
 

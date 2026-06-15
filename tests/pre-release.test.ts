@@ -34,6 +34,18 @@ describe("Pre-Release - Build System", () => {
     expect(size).toBeGreaterThan(1000); // At least 1KB
     expect(size).toBeLessThan(1500000); // Less than 1.5MB (includes Ink/React)
   });
+
+  it("build artifact should start without errors (smoke test)", async () => {
+    const distPath = join(getDistDir(), "index.js");
+    const proc = Bun.spawn(["bun", distPath, "--version"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+    const stdout = await new Response(proc.stdout).text();
+    expect(proc.exitCode).toBe(0);
+    expect(stdout).toContain("Tako CLI");
+  });
 });
 
 describe("Pre-Release - Source Code Integrity", () => {
