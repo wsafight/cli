@@ -26,6 +26,7 @@ packages/cli/src/quota/
 ├── types.ts                    OfficialQuota / QuotaSlot 类型
 ├── index.ts                    dispatcher + 60s 内存缓存
 ├── tako.ts                     Tako 代理 fetcher
+├── command.ts                  tako quota JSON 命令
 ├── claude-subscription.ts      Claude OAuth fetcher
 └── codex-subscription.ts       Codex OAuth fetcher
 ```
@@ -65,6 +66,26 @@ interface OfficialQuota {
 - 5s 超时
 - 字段映射：`usage.windowCost / plan.window_cost_limit → primary`、`usage.weeklyCost / plan.weekly_cost_limit → secondary`、`usage.dailyCost / plan.daily_cost_limit → daily`
 - 用量百分比 `usedPct = round(used / limit * 100)`，`limit === 0` 视为无限制（usedPct = 0）
+
+### Tako quota command (`command.ts`)
+
+`tako quota` 是脚本接口，stdout 固定输出一行 JSON：
+
+- 成功：`{ provider: "tako", status: "ok", fiveHour?, daily?, weekly?, fetchedAt }`
+- 失败：`{ provider: "tako", status: "error", error, message, hint? }`
+
+凭证选择不变量：
+
+1. 如果存在 `config.providers[].type === "tako"`，只使用该 provider 自己的 `apiKey` / `apiId`。
+2. 只有完全没有 Tako provider 时，才 fallback 到 legacy 顶层 `config.apiKey` / `config.apiId`。
+3. 不允许把 provider 的 `apiKey` 和 legacy 顶层 `apiId` 混成一组凭证。
+
+`apiId` 是 Tako APIStats 系统中某个 API key 对应的统计标识，通过
+`POST /apiStats/api/get-key-id` 从 `apiKey` 解析得到。查询 quota 时使用
+`apiId`，所以 `apiId` 必须和当前 `apiKey` 属于同一账号/同一把 key。
+
+如果保存的 provider `apiId` 查 quota 失败，但 provider `apiKey` 可用，命令会重新调用
+`get-key-id` 解析 fresh `apiId` 并重试；不会把 fresh `apiId` 写回配置。
 
 ### Claude Subscription (`claude-subscription.ts`)
 
@@ -132,4 +153,4 @@ useEffect(() => {
 
 ## 已有测试
 
-无（新模块）。
+见 `tests/unit.quota.test.ts` 与 `tests/unit.quota-command.test.ts`。

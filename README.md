@@ -185,6 +185,8 @@ curl -fsSL https://raw.githubusercontent.com/tako-dev/cli/main/skills/model-benc
 |-------|------|
 | 📖 Agent module design / Agent 模块设计 | [`docs/agent/DESIGN.md`](docs/agent/DESIGN.md) |
 | 🧪 Agent test plan / 测试计划 | [`docs/agent/TESTPLAN.md`](docs/agent/TESTPLAN.md) |
+| 💰 Quota module / 用量模块 | [`docs/quota/DESIGN.md`](docs/quota/DESIGN.md) |
+| 🚢 Release runbook / 发版手册 | [`docs/release/RUNBOOK.md`](docs/release/RUNBOOK.md) |
 | 🤖 tako-agent skill | [`skills/tako-agent/SKILL.md`](skills/tako-agent/SKILL.md) |
 | 📊 Model benchmark & picker / 选模型指南 | [`skills/model-benchmark/SKILL.md`](skills/model-benchmark/SKILL.md) |
 | 🐛 Issues & feedback | [GitHub Issues](https://github.com/tako-dev/cli/issues) |

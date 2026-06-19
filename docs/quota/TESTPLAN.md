@@ -8,7 +8,8 @@ type: testplan
 
 ## 已有覆盖
 
-无（新模块）。
+- `tests/unit.quota.test.ts` 覆盖 dispatcher 与各 provider fetcher。
+- `tests/unit.quota-command.test.ts` 覆盖 `tako quota` JSON 命令、stale `apiId` retry、缺配置错误和 provider/legacy credential 隔离。
 
 ## 测试场景
 
@@ -71,11 +72,23 @@ type: testplan
 - 输入：mock fetch 卡住 6 秒
 - 期望：5 秒后超时，返回 `status: "error"` 含错误信息
 
+### TP-QUOTA-12：tako quota stale apiId retry
+
+- 输入：provider 同时有 `apiKey` 和 stale `apiId`；第一次 quota 查询返回 error；`get-key-id` 返回 fresh `apiId`
+- 期望：调用顺序为 stale `apiId` → resolve provider `apiKey` → fresh `apiId`，最终返回 `status: "ok"`
+
+### TP-QUOTA-13：tako quota 不混用 legacy credentials
+
+- 输入：legacy 顶层有 `apiKey/apiId`，Tako provider 只有自己的 `apiKey`
+- 期望：命令不请求 legacy `apiId`，而是用 provider `apiKey` 解析 fresh provider `apiId`
+- 防护：避免显示旧账号 quota
+
 ## 运行方式
 
 ```bash
 cd packages/cli
 bun test tests/unit.quota.test.ts
+bun test tests/unit.quota-command.test.ts
 ```
 
 bun:test 单测，不需要真实网络。通过替换全局 `fetch` 为 mock 函数来注入响应。

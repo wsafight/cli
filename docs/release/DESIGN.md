@@ -52,6 +52,7 @@ bun run release:minor  # minor: 0.x.y → 0.(x+1).0
 - `scripts/release-gate.sh` — 手动本地 pre-check（可选）
 - `tests/pre-release.test.ts` — 构建产物验证（含 smoke test）
 - `tests/e2e/installer-driver.ts` — 三平台 e2e 驱动
+- `docs/release/RUNBOOK.md` — 发版操作手册与误 tag 清理流程
 
 ## 事故与教训
 
@@ -66,6 +67,13 @@ bun run release:minor  # minor: 0.x.y → 0.(x+1).0
 
 **现象**：`install.sh | bash` 安装后自动启动 tako，pipe 环境无 TTY，Ink 报 Raw mode error。
 **修复**：进入 TUI 前检查 `process.stdin.isTTY`，非终端优雅提示退出。
+
+### v0.3.6 — release script quoting 导致误 tag
+
+**现象**：`bun run release` 中 `node -p` 版本读取失败，生成了错误 tag `v`。
+**根因**：`package.json` script 中单引号内部保留了 `\"` 反斜杠，Node 收到 `require(\"./package.json\")`。
+**修复**：将 script 中版本表达式改为实际执行 `require("./package.json").version`。
+**防护**：发版后必须核对 `git ls-remote --tags origin 'refs/tags/v*'` 和 `npm view tako-cli version dist-tags.latest --json`；误 tag 清理步骤见 `RUNBOOK.md`。
 
 ## 回滚
 

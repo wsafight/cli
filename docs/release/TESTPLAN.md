@@ -59,6 +59,24 @@ echo "$OUTPUT" | grep -q "Tako CLI" || exit 1
 | Pre-release | release.yml → publish job | 任何断言失败 → 阻断 |
 | npm publish | release.yml → publish job | OIDC/registry 问题 → 阻断 |
 
+## TP-REL-SCRIPT：release script 版本展开
+
+`package.json` 的 `release` / `release:minor` 依赖 shell 内联命令读取版本：
+
+```bash
+node -p 'require("./package.json").version'
+```
+
+发版脚本变更后必须验证：
+
+```bash
+node -p "require('./package.json').scripts.release"
+node -p "require('./package.json').scripts['release:minor']"
+node -p 'require("./package.json").version'
+```
+
+实际展开的 script 中不应出现传给 Node 的 `require(\"./package.json\")`。
+
 ## 运行方式
 
 ```bash
