@@ -35,6 +35,7 @@ ${t("cli.shortcutGemini")}
 
 Commands:
   tako install <client>     Install AI coding tool
+  tako quota                Print Tako quota as JSON
   tako agent [--model X]    Start agent mode
   tako skill list           List available skills
   tako skill install <name> Install skill to current project
@@ -134,6 +135,15 @@ async function run() {
   // - 带 version：安装该版本到 TOOLS_DIR/<client>
   if (args[0] === "install") {
     await runInstallCommand(args.slice(1));
+    return;
+  }
+
+  // quota 命令：tako quota
+  // 脚本接口，stdout 固定输出 JSON；失败时 runQuotaCommand 返回非 0 code。
+  if (args[0] === "quota") {
+    const { runQuotaCommand } = await import("./quota/command");
+    const code = await runQuotaCommand(args.slice(1));
+    if (code !== 0) process.exit(code);
     return;
   }
 
