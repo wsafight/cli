@@ -124,6 +124,34 @@ describe("tako quota command", () => {
     });
   });
 
+  it("does not mix legacy apiId with provider apiKey", async () => {
+    const calls: string[] = [];
+    const result = await buildQuotaPayload(config({
+      apiKey: "cr_legacy",
+      apiId: "legacy-id",
+      providers: [{
+        id: "p-tako",
+        name: "Tako 官方",
+        type: "tako",
+        apiKey: "cr_provider",
+        createdAt: "2026-06-19T00:00:00.000Z",
+      }],
+    }), {
+      fetchQuotaByApiId: async (apiId) => {
+        calls.push(apiId);
+        return okQuota(apiId);
+      },
+      resolveApiIdFromKey: async (apiKey) => {
+        calls.push(`resolve:${apiKey}`);
+        return { valid: true, apiId: "provider-id" };
+      },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(calls).toEqual(["resolve:cr_provider", "provider-id"]);
+    expect(result.payload.status).toBe("ok");
+  });
+
   it("returns JSON error and non-zero exit code when Tako config is missing", async () => {
     const result = await buildQuotaPayload(config(), {
       fetchQuotaByApiId: async () => okQuota("unexpected"),

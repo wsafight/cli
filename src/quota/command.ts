@@ -66,8 +66,8 @@ interface TakoCredentials {
 
 function getTakoCredentials(config: TakoConfig): TakoCredentials | null {
   const provider = (config.providers ?? []).find((p) => p.type === "tako");
-  const apiId = provider?.apiId || config.apiId || "";
-  const apiKey = provider?.apiKey || config.apiKey || "";
+  const apiId = provider ? provider.apiId || "" : config.apiId || "";
+  const apiKey = provider ? provider.apiKey || "" : config.apiKey || "";
   if (!apiId && !apiKey) return null;
   return { apiId, apiKey };
 }
