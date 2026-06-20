@@ -259,16 +259,16 @@ const translations = {
       zh: "快捷命令：",
     },
     shortcutClaude: {
-      en: "  --claude          Launch Claude Code directly",
-      zh: "  --claude          直接启动 Claude Code",
+      en: "  --claude [args...]   Launch Claude Code (passes extra args through, e.g. --model)",
+      zh: "  --claude [参数...]   启动 Claude Code（额外参数透传给 claude，如 --model）",
     },
     shortcutCodex: {
-      en: "  --codex           Launch Codex directly",
-      zh: "  --codex           直接启动 Codex",
+      en: "  --codex [args...]    Launch Codex (passes extra args through)",
+      zh: "  --codex [参数...]    启动 Codex（额外参数透传给 codex）",
     },
     shortcutGemini: {
-      en: "  --gemini          Launch Gemini CLI directly",
-      zh: "  --gemini          直接启动 Gemini CLI",
+      en: "  --gemini [args...]   Launch Gemini CLI (passes extra args through)",
+      zh: "  --gemini [参数...]   启动 Gemini CLI（额外参数透传给 gemini）",
     },
     examples: {
       en: "Examples:",
@@ -281,6 +281,10 @@ const translations = {
     exampleClaude: {
       en: "  tako --claude     Launch Claude Code directly",
       zh: "  tako --claude     直接启动 Claude Code",
+    },
+    exampleClaudeModel: {
+      en: "  tako --claude --model claude-opus-4-7   Launch Claude Code with a specific model",
+      zh: "  tako --claude --model claude-opus-4-7   指定模型启动 Claude Code",
     },
     exampleCodex: {
       en: "  tako --codex      Launch Codex directly",
