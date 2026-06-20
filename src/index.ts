@@ -12,6 +12,7 @@ import { t } from "./i18n";
 import { track, identify, shutdown } from "./analytics";
 import { statusLineCommand, injectStatusLineConfig } from "./statusline";
 import { selectProviderForClient } from "./ui/providers";
+import { buildPassthroughArgs } from "./quick-launch-args";
 import { loadCatalog, refreshCatalog } from "./models";
 import { listAvailableVersions, installAtVersion, getInstalledVersion } from "./installer-versions";
 import { IS_DEV } from "./config";
@@ -43,6 +44,7 @@ Commands:
 ${t("cli.examples")}
 ${t("cli.exampleInteractive")}
 ${t("cli.exampleClaude")}
+${t("cli.exampleClaudeModel")}
 ${t("cli.exampleCodex")}
 ${t("cli.exampleGemini")}
 `);
@@ -100,7 +102,11 @@ async function runInstallCommand(rest: string[]): Promise<void> {
  * 快捷启动（--claude, --codex, --gemini）
  * 自动选 Provider，不弹 Ink 菜单
  */
-async function quickLaunch(clientId: string, clientName: string): Promise<void> {
+async function quickLaunch(
+  clientId: string,
+  clientName: string,
+  passthroughArgs: string[],
+): Promise<void> {
   const client = getClient(clientId);
   if (!client) {
     console.error(t("cli.clientNotFound", { client: clientName }));
@@ -113,7 +119,10 @@ async function quickLaunch(clientId: string, clientName: string): Promise<void> 
     process.exit(1);
   }
 
-  const result = await launchClientUnified(client, { providerContext });
+  const result = await launchClientUnified(client, {
+    providerContext,
+    args: passthroughArgs,
+  });
   if (!result.success) {
     console.error(result.error);
     process.exit(1);
@@ -182,17 +191,17 @@ async function run() {
   // 快捷启动命令
   if (args.includes("--claude")) {
     if (!isDev) await checkAndUpdate();
-    await quickLaunch("claude-code", "Claude Code");
+    await quickLaunch("claude-code", "Claude Code", buildPassthroughArgs("claude-code", args, "--claude"));
     return;
   }
   if (args.includes("--codex")) {
     if (!isDev) await checkAndUpdate();
-    await quickLaunch("codex", "Codex");
+    await quickLaunch("codex", "Codex", buildPassthroughArgs("codex", args, "--codex"));
     return;
   }
   if (args.includes("--gemini")) {
     if (!isDev) await checkAndUpdate();
-    await quickLaunch("gemini", "Gemini CLI");
+    await quickLaunch("gemini", "Gemini CLI", buildPassthroughArgs("gemini", args, "--gemini"));
     return;
   }
 
