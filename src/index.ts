@@ -191,17 +191,17 @@ async function run() {
   // 快捷启动命令
   if (args.includes("--claude")) {
     if (!isDev) await checkAndUpdate();
-    await quickLaunch("claude-code", "Claude Code", buildPassthroughArgs("claude-code", args, "--claude"));
+    await quickLaunch("claude-code", "Claude Code", await buildPassthroughArgs("claude-code", args, "--claude"));
     return;
   }
   if (args.includes("--codex")) {
     if (!isDev) await checkAndUpdate();
-    await quickLaunch("codex", "Codex", buildPassthroughArgs("codex", args, "--codex"));
+    await quickLaunch("codex", "Codex", await buildPassthroughArgs("codex", args, "--codex"));
     return;
   }
   if (args.includes("--gemini")) {
     if (!isDev) await checkAndUpdate();
-    await quickLaunch("gemini", "Gemini CLI", buildPassthroughArgs("gemini", args, "--gemini"));
+    await quickLaunch("gemini", "Gemini CLI", await buildPassthroughArgs("gemini", args, "--gemini"));
     return;
   }
 
