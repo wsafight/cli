@@ -40,6 +40,7 @@ Commands:
   tako agent [--model X]    Start agent mode
   tako skill list           List available skills
   tako skill install <name> Install skill to current project
+  tako models [--refresh]   List models exposed by Tako providers
 
 ${t("cli.examples")}
 ${t("cli.exampleInteractive")}
@@ -168,6 +169,14 @@ async function run() {
   if (args[0] === "skill") {
     const { runSkillCommand } = await import("./skills/command");
     await runSkillCommand(args.slice(1));
+    return;
+  }
+
+  // models 命令：tako models [list] [--refresh] [--json]
+  if (args[0] === "models") {
+    const { runModelsCommand } = await import("./models/command");
+    const code = await runModelsCommand(args.slice(1));
+    if (code !== 0) process.exit(code);
     return;
   }
 
