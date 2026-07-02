@@ -56,6 +56,11 @@ async function checkAndCleanClaudeSettings(): Promise<void> {
 
   log.warn(t("claudeCode.settingsDetected", { fields: cleanedFields.join(", ") }));
 
+  if (!process.stdin.isTTY || typeof process.stdin.setRawMode !== "function") {
+    log.info(t("claudeCode.cleanSkipped"));
+    return;
+  }
+
   const confirmed = await inkConfirm({
     message: t("claudeCode.confirmClean"),
     defaultValue: true,

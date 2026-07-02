@@ -20,6 +20,11 @@ export interface LaunchOptions {
   selectedOptionIds?: string[];
   /** 调用方直接指定的 Provider（跳过选择） */
   providerContext?: ProviderContext;
+  /**
+   * Windows quick-launch mode: prepare a wrapper-level handoff instead of
+   * spawning the interactive TUI as Bun's child process.
+   */
+  handoffOnWindows?: boolean;
 }
 
 export interface LaunchResult {

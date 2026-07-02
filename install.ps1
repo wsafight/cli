@@ -246,9 +246,16 @@ function Create-Command {
     New-Item -ItemType Directory -Force -Path $TAKO_BIN_DIR | Out-Null
 
     # Create tako.cmd batch file
+    # 注意：这份 cmd/ps1 wrapper 逻辑与 src/windows-wrapper.ts 等价（更新时由那里重写）。
+    # 改这里必须同步改 windows-wrapper.ts，否则安装期与更新期写的 wrapper 会漂移。
     $cmdContent = @"
 @echo off
+set "TAKO_WINDOWS_HANDOFF_FILE=%TEMP%\tako-handoff-%RANDOM%-%RANDOM%.ps1"
+if exist "%TAKO_WINDOWS_HANDOFF_FILE%" del "%TAKO_WINDOWS_HANDOFF_FILE%" >nul 2>nul
 "$bun" "$TakoEntry" %*
+set "TAKO_EXIT_CODE=%ERRORLEVEL%"
+if not exist "%TAKO_WINDOWS_HANDOFF_FILE%" exit /b %TAKO_EXIT_CODE%
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%TAKO_WINDOWS_HANDOFF_FILE%"
 exit /b %ERRORLEVEL%
 "@
 
@@ -257,8 +264,15 @@ exit /b %ERRORLEVEL%
 
     # Create tako.ps1 PowerShell script (optional)
     $ps1Content = @"
+`$env:TAKO_WINDOWS_HANDOFF_FILE = Join-Path ([System.IO.Path]::GetTempPath()) ("tako-handoff-{0}-{1}.ps1" -f `$PID, [System.Guid]::NewGuid().ToString("N"))
+Remove-Item -LiteralPath `$env:TAKO_WINDOWS_HANDOFF_FILE -Force -ErrorAction SilentlyContinue
 & "$bun" "$TakoEntry" @args
-exit `$LASTEXITCODE
+`$code = `$LASTEXITCODE
+if (Test-Path -LiteralPath `$env:TAKO_WINDOWS_HANDOFF_FILE) {
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File `$env:TAKO_WINDOWS_HANDOFF_FILE
+  exit `$LASTEXITCODE
+}
+exit `$code
 "@
     $ps1Bytes = [System.Text.Encoding]::UTF8.GetBytes($ps1Content)
     [System.IO.File]::WriteAllBytes("$TAKO_BIN_DIR\tako.ps1", $ps1Bytes)

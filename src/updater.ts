@@ -5,6 +5,7 @@ import { join } from "path";
 import { t } from "./i18n";
 import { track } from "./analytics";
 import { streamBunInstall } from "./bun-progress";
+import { buildWindowsCmdWrapper, buildWindowsPs1Wrapper } from "./windows-wrapper";
 
 // Tako CLI 包名
 const PACKAGE_NAME = "tako-cli";
@@ -89,8 +90,8 @@ async function updateWrapperScript(): Promise<void> {
 
   if (isWindows) {
     // Windows: 创建 .cmd 文件
-    const cmdContent = `@echo off\r\n"${TAKO_BUN_BIN}" "${takoEntry}" %*\r\n`;
-    await fs.writeFile(join(takoBinDir, "tako.cmd"), cmdContent);
+    await fs.writeFile(join(takoBinDir, "tako.cmd"), buildWindowsCmdWrapper(TAKO_BUN_BIN, takoEntry));
+    await fs.writeFile(join(takoBinDir, "tako.ps1"), buildWindowsPs1Wrapper(TAKO_BUN_BIN, takoEntry));
   } else {
     // Unix: 创建 bash script
     const shContent = `#!/bin/bash\nexec "${TAKO_BUN_BIN}" "${takoEntry}" "$@"\n`;
