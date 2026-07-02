@@ -179,10 +179,10 @@ export async function launchClient(
       }
     }
 
-    // 释放 stdin — 清除父进程（Ink / Bun）残留的监听器
+    // 释放 stdin — 清除父进程（TUI / Bun）残留的监听器
     //
-    // 背景：快捷启动前可能弹过 inkConfirm（更新确认 / 清理 settings），
-    // 交互式主菜单本身也是 Ink。Ink 会 setRawMode(true) 并挂 stdin 的
+    // 背景：快捷启动前可能弹过确认提示（更新确认 / 清理 settings），
+    // 交互式主菜单本身也会 setRawMode(true) 并挂 stdin 的
     // "data"/"readable" 监听器。unmount 后这些监听器 + raw 状态不一定干净，
     // 父进程 Bun 若继续读 stdin，会和子进程争抢按键 —— 表现为子进程 TUI
     // （Claude Code / Codex）画面渲染出来了，但按键无响应（"卡死"）。

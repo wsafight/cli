@@ -199,26 +199,41 @@ async function run() {
   // dev 模式不自动更新：源码直跑（VERSION=dev）/ 显式 TAKO_DEV / localhost server
   const isDev = VERSION === "dev" || IS_DEV;
 
-  // 初始化埋点
-  identify();
-  track("cli_started");
-
   // 快捷启动命令
   if (args.includes("--claude")) {
+    identify();
+    track("cli_started");
     if (!isDev) await checkAndUpdate();
     await quickLaunch("claude-code", "Claude Code", await buildPassthroughArgs("claude-code", args, "--claude"));
     return;
   }
   if (args.includes("--codex")) {
+    identify();
+    track("cli_started");
     if (!isDev) await checkAndUpdate();
     await quickLaunch("codex", "Codex", await buildPassthroughArgs("codex", args, "--codex"));
     return;
   }
   if (args.includes("--gemini")) {
+    identify();
+    track("cli_started");
     if (!isDev) await checkAndUpdate();
     await quickLaunch("gemini", "Gemini CLI", await buildPassthroughArgs("gemini", args, "--gemini"));
     return;
   }
+
+  // 交互式 TUI 需要 TTY（stdin raw mode）。pipe / 非终端环境无法运行。
+  if (!process.stdin.isTTY) {
+    console.log("Tako CLI v" + VERSION);
+    console.log("\n安装成功！请在终端中直接运行 tako 启动交互界面。");
+    console.log("  tako          — 交互式启动器");
+    console.log("  tako --help   — 查看所有命令");
+    return;
+  }
+
+  // 初始化埋点
+  identify();
+  track("cli_started");
 
   // 检查自动更新
   if (!isDev) await checkAndUpdate();
@@ -230,16 +245,7 @@ async function run() {
   loadCatalog();
   refreshCatalog().catch(() => {});
 
-  // 交互式 TUI 需要 TTY（stdin raw mode）。pipe / 非终端环境无法运行。
-  if (!process.stdin.isTTY) {
-    console.log("Tako CLI v" + VERSION);
-    console.log("\n安装成功！请在终端中直接运行 tako 启动交互界面。");
-    console.log("  tako          — 交互式启动器");
-    console.log("  tako --help   — 查看所有命令");
-    return;
-  }
-
-  // 运行 Ink TUI 主程序
+  // 运行 OpenTUI 主程序
   await main();
 }
 

@@ -45,7 +45,7 @@ src/
   clients/     # Claude Code / Codex / Gemini drivers / 各客户端驱动
   providers/   # provider resolution / 服务商解析
   models/      # bundled model catalog / 模型清单
-  ui/ink/      # Ink TUI views / TUI 界面
+  ui/opentui/  # OpenTUI views / TUI 界面
 docs/          # module design + test plans / 模块文档
 skills/        # bundled Claude Code skills / 内置技能
 tests/         # bun:test suites / 测试
