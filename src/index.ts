@@ -123,11 +123,17 @@ async function quickLaunch(
   const result = await launchClientUnified(client, {
     providerContext,
     args: passthroughArgs,
+    handoffOnWindows: true,
   });
   if (!result.success) {
     console.error(result.error);
     process.exit(1);
   }
+
+  // Windows quick-launch writes a handoff script for the outer wrapper to run.
+  // Exit explicitly so background analytics/stdin handles cannot keep Bun alive
+  // and block the wrapper from starting Claude Code.
+  process.exit(result.exitCode ?? 0);
 }
 
 async function run() {

@@ -438,6 +438,10 @@ const translations = {
       en: "Skipped. Note: hardcoded settings may cause issues with Tako",
       zh: "已跳过。注意：写死的配置可能导致 Tako 启动异常",
     },
+    usingIsolatedSettings: {
+      en: "Using Tako-managed Claude Code settings for this launch: {path}",
+      zh: "本次启动将使用 Tako 托管的 Claude Code settings：{path}",
+    },
     subscriptionMissingAuth: {
       en: "Selected Claude account has no captured credentials. Run `claude /login` for that account, then re-detect in Tako.",
       zh: "目标 Claude 账号缺少凭据。请用 `claude /login` 登录该账号后，让 Tako 重新检测一次。",

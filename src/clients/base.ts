@@ -50,8 +50,12 @@ export interface ClientConfig {
   runtime?: "native" | "bun";
   /** 生成环境变量（根据 Provider 上下文） */
   getEnvVars: (provider: ProviderContext) => Record<string, string>;
-  /** 生成配置文件（可选） */
-  setupConfigFiles?: (provider: ProviderContext, selectedOptionIds?: string[]) => Promise<void>;
+  /** 生成配置文件（可选），可返回需要附加到客户端命令行的启动参数 */
+  setupConfigFiles?: (
+    provider: ProviderContext,
+    selectedOptionIds?: string[],
+    context?: { forLaunch?: boolean },
+  ) => Promise<void | { args?: string[]; envVars?: Record<string, string> }>;
   /** 接续会话的命令行参数（如 "--continue"） */
   continueArg?: string;
   /** Launch options (toggleable flags). 可以是数组或 lazy 函数 — 后者用于运行时根据

@@ -52,17 +52,31 @@ export async function main(): Promise<void> {
       continue;
     }
 
+    const isWindows = process.platform === "win32";
+    // Windows 面板路径：走 handoff 让顶层 shell 启动客户端（键盘才正常），
+    // 客户端退出后 handoff 会重开 tako 回到菜单。仅当 wrapper 提供了 handoff
+    // 文件时启用；否则退化到 Bun 直接 spawn（launcher 内部处理）。
+    const useWindowsHandoff =
+      isWindows && !!process.env.TAKO_WINDOWS_HANDOFF_FILE;
+
     const launchResult = await launchClientUnified(client, {
       projectPath: result.projectPath,
       args: result.args,
       envVars: result.envVars,
       selectedOptionIds: result.selectedOptionIds,
       providerContext,
+      relaunchTakoOnWindows: useWindowsHandoff,
     });
 
     if (!launchResult.success) {
       log.error(launchResult.error || t("cli.launchFailed"));
+      // handoff 写入失败时不退出，回到菜单循环
+    } else if (useWindowsHandoff) {
+      // handoff 已写入：Bun 必须完全退出，外层 wrapper 才会执行 handoff
+      // （启动客户端 → 客户端退出后重开 tako）。不 return 而是显式退出，
+      // 避免后台 stdin / analytics 句柄让 Bun 存活阻塞 wrapper。
+      process.exit(0);
     }
-    // 循环回 startApp()，重新渲染主菜单
+    // 循环回 startApp()，重新渲染主菜单（非 Windows / 无 handoff 路径）
   }
 }
