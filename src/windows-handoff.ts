@@ -21,6 +21,14 @@ export interface WindowsHandoffScriptOptions {
    * 传空对象即可，避免 token 明文落盘。
    */
   env?: Record<string, string | undefined>;
+  /**
+   * 子进程退出后要重新执行的命令（如重开 Tako 面板）。
+   *
+   * 面板路径（Ink 主循环）用这个：Claude 退出后 handoff 脚本再拉起 `tako`，
+   * 让用户回到菜单。新 tako 会拿到自己 wrapper 的新 handoff 文件，循环得以继续。
+   * 不传则子进程退出后 handoff 直接结束（等价于 quick-launch）。
+   */
+  relaunchCommand?: string[];
 }
 
 /**
@@ -59,8 +67,23 @@ export function buildWindowsHandoffScript(options: WindowsHandoffScriptOptions):
     `  & ${psSingleQuoted(exe)} @argv`,
     "  $code = if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 0 }",
     "} finally {",
-    // 无论子进程正常退出 / 抛错 / Ctrl+C，都删掉含 token 的临时脚本
+    // 无论子进程正常退出 / 抛错 / Ctrl+C，都先删掉含 token 的临时脚本，
+    // 再（可选）重开 Tako。先删除是为了即使重开命令抛错也不残留 token。
     "  Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue",
+  );
+
+  const relaunch = options.relaunchCommand ?? [];
+  if (relaunch.length > 0) {
+    const [relaunchExe, ...relaunchArgs] = relaunch;
+    lines.push(
+      `  $relaunchArgv = ${psArray(relaunchArgs)}`,
+      // 重开 Tako 面板。让它继承当前控制台，用户回到菜单；退出码以 Tako 为准。
+      `  & ${psSingleQuoted(relaunchExe!)} @relaunchArgv`,
+      "  $code = if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { $code }",
+    );
+  }
+
+  lines.push(
     "}",
     "exit $code",
     "",

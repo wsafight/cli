@@ -25,6 +25,14 @@ export interface LaunchOptions {
    * spawning the interactive TUI as Bun's child process.
    */
   handoffOnWindows?: boolean;
+  /**
+   * 面板（Ink 主循环）路径专用：Windows 上走 handoff 启动客户端，并让 handoff
+   * 脚本在客户端退出后重新拉起 Tako 面板。这样键盘能正常工作（子进程由顶层
+   * cmd/PowerShell 启动而非 Bun），且用户仍能回到菜单。
+   * 设置该项时，launchClient 返回后调用方应 process.exit()（Bun 必须完全退出，
+   * 外层 wrapper 才会执行 handoff）。
+   */
+  relaunchTakoOnWindows?: boolean;
 }
 
 export interface LaunchResult {

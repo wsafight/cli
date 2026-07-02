@@ -102,6 +102,35 @@ export async function launchClient(
       }
     }
 
+    if (isWindows && options?.relaunchTakoOnWindows) {
+      const fs = await import("fs/promises");
+      const handoffPath = process.env[WINDOWS_HANDOFF_ENV];
+      if (handoffPath) {
+        // 面板路径：和 quick-launch 一样把启动交给外层 wrapper 执行，Bun 退出后
+        // 由顶层 cmd/PowerShell 起客户端 —— 这样 Windows 控制台输入能干净交接给
+        // 子进程，键盘才有响应（Bun 作为父进程直接 spawn 会渲染出画面但收不到键）。
+        // handoff 由 wrapper 执行，wrapper 环境没有 token，故需显式写 extraEnv。
+        // 客户端退出后 handoff 重新拉起 tako（bun + 当前 tako 入口），用户回到菜单。
+        // process.argv = [bunExe, takoEntry, ...userArgs]；重开面板不带用户参数。
+        const relaunchCommand = [process.argv[0], process.argv[1]].filter(
+          (a): a is string => typeof a === "string" && a.length > 0,
+        );
+        await fs.writeFile(
+          handoffPath,
+          buildWindowsHandoffScript({
+            command,
+            cwd: workingDir,
+            env: extraEnv,
+            relaunchCommand,
+          }),
+          "utf8",
+        );
+        return { success: true };
+      }
+      // 没有 wrapper handoff 文件（如直接用 bun 跑、非 wrapper 环境）：
+      // 退化到下面的交互式 PowerShell 子进程路径（键盘可能不响应，但不中断）。
+    }
+
     async function releaseStdinForChild(): Promise<void> {
       try {
         process.stdin.removeAllListeners();
