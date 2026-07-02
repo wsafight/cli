@@ -85,8 +85,18 @@ export async function launchClientUnified(
     }
 
     // Setup config files
+    let setupLaunchArgs: string[] = [];
+    let setupEnvVars: Record<string, string> = {};
     if (client.setupConfigFiles) {
-      await client.setupConfigFiles(providerContext, options?.selectedOptionIds);
+      const setupResult = await client.setupConfigFiles(
+        providerContext,
+        options?.selectedOptionIds,
+        { forLaunch: true },
+      );
+      if (setupResult && typeof setupResult === "object") {
+        setupLaunchArgs = setupResult.args ?? [];
+        setupEnvVars = setupResult.envVars ?? {};
+      }
     }
 
     await recordProjectLaunch(workingDir, client.id, options?.selectedOptionIds);
@@ -104,6 +114,8 @@ export async function launchClientUnified(
 
     return await legacyLaunchClient(client, {
       ...options,
+      args: [...setupLaunchArgs, ...(options?.args ?? [])],
+      envVars: { ...setupEnvVars, ...(options?.envVars ?? {}) },
       providerContext,
     });
   } catch (error) {
