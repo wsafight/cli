@@ -1,6 +1,6 @@
 import { join } from "path";
 import { log, createSpinner } from "./logger";
-import { inkConfirm } from "./ui/ink/views/ConfirmDialog";
+import { confirmPrompt } from "./ui/opentui/terminal";
 import { ClientConfig, getClientDir } from "./clients/base";
 import { loadConfig, updateConfig, TAKO_DIR, TAKO_BUN_DIR, TAKO_BUN_BIN, TAKO_BUN_CACHE_DIR } from "./config";
 import { getNpmRegistry, getBunInstallCommand, detectRegion, showRegionInfo, getBunMirrorDownloadUrl } from "./region";
@@ -953,7 +953,7 @@ export async function ensureClientReady(
       return { success: true };
     }
 
-    const shouldDoUpdate = await inkConfirm({
+    const shouldDoUpdate = await confirmPrompt({
       message: `是否更新 ${client.name}？`,
       defaultValue: false,
     });

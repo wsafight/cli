@@ -32,7 +32,7 @@ describe("Pre-Release - Build System", () => {
     const file = Bun.file(distPath);
     const size = file.size;
     expect(size).toBeGreaterThan(1000); // At least 1KB
-    expect(size).toBeLessThan(1500000); // Less than 1.5MB (includes Ink/React)
+    expect(size).toBeLessThan(1500000); // Less than 1.5MB
   });
 
   it("build artifact should start without errors (smoke test)", async () => {
