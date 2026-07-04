@@ -20,7 +20,9 @@ import {
 import type { Provider } from "../../../providers/types";
 import { getLocale } from "../../../i18n";
 import { getOfficialQuota, type OfficialQuota } from "../../../quota";
-import { ProviderPicker, GroupPicker } from "./LauncherPickers";
+import { getModelPickCounts } from "../../../model-usage";
+import { ProviderPicker, GroupPicker, initialModelPickerMode, visibleModelOptions } from "./LauncherPickers";
+import { ModelGridPicker, buildGroupedGrid, getGridColumnCountForOptions, gridIndexOf } from "./ModelGridPicker";
 
 const VERSION = process.env.VERSION || "dev";
 
@@ -54,6 +56,7 @@ interface LoadResult {
   clients: ClientData[];
   defaultIdx: number;
   hasProviders: boolean;
+  pickCounts: Record<string, number>;
 }
 
 async function loadData(): Promise<LoadResult> {
@@ -100,7 +103,13 @@ async function loadData(): Promise<LoadResult> {
   }
 
   const hasProviders = clients.some((c) => c.providers.length > 0);
-  return { clients, defaultIdx: 0, hasProviders };
+  let pickCounts: Record<string, number> = {};
+  try {
+    pickCounts = await getModelPickCounts();
+  } catch {
+    pickCounts = {};
+  }
+  return { clients, defaultIdx: 0, hasProviders, pickCounts };
 }
 
 // ─── 分隔线 ─────────────────────────────────────────
@@ -239,10 +248,12 @@ function getGroupSelection(opts: LaunchOption[], enabled: Set<string>, group: st
   return opts.find((o) => o.group === group && enabled.has(o.id));
 }
 
-function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
+function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onResult }: {
   clients: ClientData[]; defaultIdx: number; hasProviders: boolean;
+  pickCounts: Record<string, number>;
   onResult: (r: LauncherResult) => void;
 }) {
+  const { stdout } = useStdout();
   const [clientIdx, setClientIdx] = useState(defaultIdx);
   const [focus, setFocus] = useState<FocusArea>("projects");
   const [projectIdx, setProjectIdx] = useState(0);
@@ -254,6 +265,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
   const [provMsg, setProvMsg] = useState("");
   /** 当前正在打开的 group picker（null = 主界面） */
   const [pickingGroup, setPickingGroup] = useState<string | null>(null);
+  const [modelPickerMode, setModelPickerMode] = useState<"collapsed" | "grid">("collapsed");
   /** true = 服务商 picker（与 pickingGroup 互斥） */
   const [pickingProvider, setPickingProvider] = useState(false);
   const [pickerIdx, setPickerIdx] = useState(0);
@@ -294,6 +306,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
     setProjectIdx(0); setOptionIdx(0); setFocus("projects");
     setProvIdx(clients[clientIdx]?.activeProvIdx || 0);
     setPickingGroup(null);
+    setModelPickerMode("collapsed");
     setPickingProvider(false);
     // 勾选状态也随工具切换，恢复到该工具上次的选择
     setEnabled(new Set(clients[clientIdx]?.lastSelectedOptionIds ?? []));
@@ -325,6 +338,31 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
       return changed ? next : prev;
     });
   }, [options, currentProv?.model]);
+
+  const openGroupPicker = useCallback((group: string) => {
+    const cur = getGroupSelection(options, enabled, group);
+    const groupOpts = options.filter((o) => o.group === group);
+    if (groupOpts.length === 0) return;
+
+    const mode = group === "model" ? initialModelPickerMode(groupOpts, pickCounts) : "collapsed";
+    let initIdx = 0;
+    if (cur) {
+      if (group === "model" && mode === "grid") {
+        const ids = groupOpts.map((o) => o.id);
+        const columnCount = getGridColumnCountForOptions(groupOpts, stdout.columns || 80, zh);
+        initIdx = gridIndexOf(ids, cur.id, columnCount);
+      } else {
+        const visible = group === "model"
+          ? visibleModelOptions(groupOpts, enabled, pickCounts).list
+          : groupOpts;
+        initIdx = visible.findIndex((o) => o.id === cur.id) + 1;
+      }
+    }
+
+    setPickerIdx(Math.max(0, initIdx));
+    setModelPickerMode(mode);
+    setPickingGroup(group);
+  }, [enabled, options, pickCounts, stdout.columns, zh]);
 
   useInput(useCallback((input: string, key: any) => {
     // ─── 服务商 picker 模式 ───
@@ -369,8 +407,75 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
     // ─── 模型 picker 模式 ───
     if (pickingGroup) {
       const groupOpts = options.filter((o) => o.group === pickingGroup);
-      const pickerLen = groupOpts.length + 1; // +1 for "默认（清空）"
-      if (key.escape || input === "q") { setPickingGroup(null); return; }
+      const isModelGroup = pickingGroup === "model";
+
+      if (isModelGroup && modelPickerMode === "grid") {
+        const ids = groupOpts.map((o) => o.id);
+        const columnCount = getGridColumnCountForOptions(groupOpts, stdout.columns || 80, zh);
+        const grid = buildGroupedGrid(ids, columnCount);
+        const rowsInOrder = grid.groups.flatMap((group) => group.rows);
+        const pickerLen = grid.flat.length;
+        if (input === "q") { setPickingGroup(null); setModelPickerMode("collapsed"); return; }
+        if (key.escape) {
+          if (initialModelPickerMode(groupOpts, pickCounts) === "grid") {
+            setPickingGroup(null);
+          } else {
+            setModelPickerMode("collapsed");
+            // 回到折叠态时把焦点还原到当前选中项（没有选中则落到「默认/清空」），
+            // 而不是无脑跳回第一行。
+            const cur = getGroupSelection(options, enabled, pickingGroup);
+            const visibleList = visibleModelOptions(groupOpts, enabled, pickCounts).list;
+            setPickerIdx(cur ? Math.max(0, visibleList.findIndex((o) => o.id === cur.id) + 1) : 0);
+          }
+          return;
+        }
+        if (pickerLen === 0) return;
+        if (key.leftArrow) { setPickerIdx((p) => (p > 0 ? p - 1 : pickerLen - 1)); return; }
+        if (key.rightArrow) { setPickerIdx((p) => (p < pickerLen - 1 ? p + 1 : 0)); return; }
+        if (key.upArrow || key.downArrow) {
+          setPickerIdx((p) => {
+            let row = 0;
+            let col = 0;
+            let offset = 0;
+            for (let i = 0; i < rowsInOrder.length; i++) {
+              const rowLen = rowsInOrder[i].length;
+              if (p < offset + rowLen) {
+                row = i;
+                col = p - offset;
+                break;
+              }
+              offset += rowLen;
+            }
+            const nextRow = key.upArrow
+              ? (row > 0 ? row - 1 : rowsInOrder.length - 1)
+              : (row < rowsInOrder.length - 1 ? row + 1 : 0);
+            const nextCol = Math.min(col, rowsInOrder[nextRow].length - 1);
+            return rowsInOrder.slice(0, nextRow).reduce((sum, r) => sum + r.length, 0) + nextCol;
+          });
+          return;
+        }
+        if (key.return) {
+          const pickedId = grid.flat[pickerIdx];
+          const picked = groupOpts.find((o) => o.id === pickedId);
+          if (picked) {
+            setEnabled((prev) => {
+              const next = new Set(prev);
+              for (const o of groupOpts) next.delete(o.id);
+              next.add(picked.id);
+              return next;
+            });
+          }
+          setPickingGroup(null);
+          setModelPickerMode("collapsed");
+        }
+        return;
+      }
+
+      const visible = isModelGroup
+        ? visibleModelOptions(groupOpts, enabled, pickCounts)
+        : { list: groupOpts, hiddenCount: 0 };
+      const pickerLen = visible.list.length + 1 + (visible.hiddenCount > 0 ? 1 : 0);
+      if (key.escape || input === "q") { setPickingGroup(null); setModelPickerMode("collapsed"); return; }
       if (key.upArrow) { setPickerIdx((p) => (p > 0 ? p - 1 : pickerLen - 1)); return; }
       if (key.downArrow) { setPickerIdx((p) => (p < pickerLen - 1 ? p + 1 : 0)); return; }
       if (key.return) {
@@ -380,8 +485,14 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
             for (const o of groupOpts) next.delete(o.id);
             return next;
           });
+        } else if (isModelGroup && visible.hiddenCount > 0 && pickerIdx === visible.list.length + 1) {
+          const cur = getGroupSelection(options, enabled, pickingGroup);
+          const initIdx = cur ? groupOpts.findIndex((o) => o.id === cur.id) : 0;
+          setPickerIdx(Math.max(0, initIdx));
+          setModelPickerMode("grid");
+          return;
         } else {
-          const picked = groupOpts[pickerIdx - 1];
+          const picked = visible.list[pickerIdx - 1];
           setEnabled((prev) => {
             const next = new Set(prev);
             for (const o of groupOpts) next.delete(o.id);
@@ -390,6 +501,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
           });
         }
         setPickingGroup(null);
+        setModelPickerMode("collapsed");
       }
       return;
     }
@@ -400,6 +512,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
     if (input === "c") { onResult({ type: "config" }); return; }
     if (input === "l") { onResult({ type: "language" }); return; }
     if (input === "p") { onResult({ type: "providers" }); return; }
+    if (input === "m") { openGroupPicker("model"); return; }
 
     const num = parseInt(input);
     if (num >= 1 && num <= clients.length) { setClientIdx(num - 1); return; }
@@ -443,11 +556,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
           return next;
         });
       } else if (row.kind === "group") {
-        const cur = getGroupSelection(options, enabled, row.group);
-        const groupOpts = options.filter((o) => o.group === row.group);
-        const initIdx = cur ? groupOpts.findIndex((o) => o.id === cur.id) + 1 : 0;
-        setPickerIdx(Math.max(0, initIdx));
-        setPickingGroup(row.group);
+        openGroupPicker(row.group);
       } else {
         // provider
         setPickerIdx(provIdx);
@@ -462,11 +571,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
       if (focus === "options" && optionRows.length > 0) {
         const row = optionRows[optionIdx];
         if (row.kind === "group") {
-          const cur = getGroupSelection(options, enabled, row.group);
-          const groupOpts = options.filter((o) => o.group === row.group);
-          const initIdx = cur ? groupOpts.findIndex((o) => o.id === cur.id) + 1 : 0;
-          setPickerIdx(Math.max(0, initIdx));
-          setPickingGroup(row.group);
+          openGroupPicker(row.group);
           return;
         }
         if (row.kind === "provider") {
@@ -486,13 +591,13 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
       }
       onResult({ type: "launch", clientId: current.client.id, projectPath: project.path, args, envVars, selectedOptionIds });
     }
-  }, [focus, clientIdx, projectIdx, optionIdx, provIdx, provs, currentProv, current, projects, options, optionRows, enabled, clients, onResult, zh, pickingGroup, pickingProvider, pickerIdx]));
+  }, [focus, clientIdx, projectIdx, optionIdx, provIdx, provs, currentProv, current, projects, options, optionRows, enabled, clients, onResult, zh, pickingGroup, pickingProvider, pickerIdx, pickCounts, modelPickerMode, stdout.columns, openGroupPicker]));
 
   return (
-    <Box flexDirection="column" paddingX={0} paddingY={1}>
+    <Box flexDirection="column" paddingX={0} paddingY={0}>
 
       {/* 主容器 */}
-      <Box flexDirection="column" borderStyle="round" borderColor={cs.color} paddingX={2} paddingY={1}>
+      <Box flexDirection="column" borderStyle="round" borderColor={cs.color} paddingX={1} paddingY={0}>
 
         {/* Header: 版本 · 账号类型 · 用量（服务商切换在底部入口） */}
         <Box justifyContent="space-between">
@@ -543,8 +648,24 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
 
         {pickingProvider ? (
           <ProviderPicker provs={provs} provIdx={provIdx} pickerIdx={pickerIdx} color={cs.color} zh={zh} />
+        ) : pickingGroup === "model" && modelPickerMode === "grid" ? (
+          <ModelGridPicker
+            options={options.filter((o) => o.group === "model")}
+            enabled={enabled}
+            pickerIdx={pickerIdx}
+            color={cs.color}
+            zh={zh}
+          />
         ) : pickingGroup ? (
-          <GroupPicker group={pickingGroup} options={options} enabled={enabled} pickerIdx={pickerIdx} color={cs.color} zh={zh} />
+          <GroupPicker
+            group={pickingGroup}
+            options={options}
+            enabled={enabled}
+            pickerIdx={pickerIdx}
+            color={cs.color}
+            zh={zh}
+            pickCounts={pickCounts}
+          />
         ) : (
           <>
 
@@ -647,7 +768,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
       </Box>
 
       {/* Footer — 根据焦点区域动态变化 */}
-      <Box paddingX={2} marginTop={1} justifyContent="center" gap={2}>
+      <Box paddingX={2} marginTop={0} justifyContent="center" gap={2}>
         {focus === "options" ? (
           <>
             <Text dimColor bold>Space</Text><Text dimColor>{zh ? "开关" : "toggle"}</Text>
@@ -655,6 +776,8 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
             <Text dimColor bold>Enter</Text><Text dimColor>{zh ? "启动" : "launch"}</Text>
             <Text dimColor>│</Text>
             <Text dimColor bold>↑↓</Text><Text dimColor>{zh ? "选择" : "select"}</Text>
+            <Text dimColor>│</Text>
+            <Text dimColor bold>m</Text><Text dimColor>{zh ? "模型" : "model"}</Text>
             <Text dimColor>│</Text>
             <Text dimColor bold>←→</Text><Text dimColor>{zh ? "切换工具" : "switch tool"}</Text>
             <Text dimColor>│</Text>
@@ -667,6 +790,8 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, onResult }: {
             <Text dimColor bold>a</Text><Text dimColor>agent</Text>
             <Text dimColor>│</Text>
             <Text dimColor bold>↑↓</Text><Text dimColor>{zh ? "选择" : "select"}</Text>
+            <Text dimColor>│</Text>
+            <Text dimColor bold>m</Text><Text dimColor>{zh ? "模型" : "model"}</Text>
             <Text dimColor>│</Text>
             <Text dimColor bold>←→</Text><Text dimColor>{zh ? "切换工具" : "switch tool"}</Text>
             <Text dimColor>│</Text>
@@ -686,5 +811,13 @@ export function LauncherView({ onResult }: { onResult: (r: LauncherResult) => vo
   const [data, setData] = useState<LoadResult | null>(null);
   useEffect(() => { loadData().then(setData); }, []);
   if (!data) return <Text dimColor>Loading...</Text>;
-  return <LauncherViewInner clients={data.clients} defaultIdx={data.defaultIdx} hasProviders={data.hasProviders} onResult={onResult} />;
+  return (
+    <LauncherViewInner
+      clients={data.clients}
+      defaultIdx={data.defaultIdx}
+      hasProviders={data.hasProviders}
+      pickCounts={data.pickCounts}
+      onResult={onResult}
+    />
+  );
 }

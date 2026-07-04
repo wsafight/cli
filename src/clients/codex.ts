@@ -206,15 +206,6 @@ function ctxStrOf(ctx: number): string {
 }
 
 /**
- * 启发式：明显是 Anthropic / Claude 家族的模型，不应该出现在 Codex（OpenAI 协议）下拉里。
- * 兜底用——par 服务端把模型标 api_type='all' 时（默认值），过滤还是会把 Claude 系
- * 也吐出来。规则保守：只挡明确以 claude- 开头的，避免误伤 deepseek / gpt-claude 桥接等。
- */
-function isObviouslyAnthropicModel(id: string): boolean {
-  return /^claude[-_]/i.test(id) || /^anthropic[-_/]/i.test(id);
-}
-
-/**
  * 优先用 par 服务器返回的 openai 系模型目录（tako/custom provider）。
  * 没缓存（首次启动 / 网络失败）时回退到内置 whitelist。
  */
@@ -222,9 +213,7 @@ function buildDynamicCodexModels(provider: Provider): LaunchOption[] | null {
   if (!provider.baseUrl) return null;
   const raw = getTakoModels(provider.baseUrl, "openai");
   if (!raw || raw.length === 0) return null;
-  const entries = raw.filter((e) => !isObviouslyAnthropicModel(e.id));
-  if (entries.length === 0) return null;
-  return entries.map((e) => ({
+  return raw.map((e) => ({
     id: `model-${e.id}`,
     label: { en: e.displayName, zh: e.displayName },
     shortLabel: e.displayName,
