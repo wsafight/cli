@@ -20,6 +20,12 @@ export interface TakoModelEntry {
   description: string;
   contextWindow: number;
   sortOrder: number;
+  /**
+   * 模型类别，来自 par 的 model_category 字段：'chat' | 'image' | 'video' | 'audio' | …
+   * 缺省（旧 par / 旧缓存）按 'chat' 处理。非 chat 的是纯生图/视频/音频模型，
+   * 不能在 Claude Code / Codex 里跑 chat，由 filterChatModels 在 UI 层过滤掉。
+   */
+  category: string;
 }
 
 interface CacheBucket {
@@ -87,9 +93,10 @@ interface CodexModelDTO {
   description?: string;
   context_window?: number | null;
   priority?: number;
+  model_category?: string;
 }
 
-function parseCodexResponse(json: unknown): TakoModelEntry[] {
+export function parseCodexResponse(json: unknown): TakoModelEntry[] {
   const arr = (json as { models?: unknown })?.models;
   if (!Array.isArray(arr)) return [];
   const out: TakoModelEntry[] = [];
@@ -102,10 +109,21 @@ function parseCodexResponse(json: unknown): TakoModelEntry[] {
       description: raw.description || "",
       contextWindow: typeof raw.context_window === "number" ? raw.context_window : 0,
       sortOrder: typeof raw.priority === "number" ? raw.priority : 0,
+      category: typeof raw.model_category === "string" && raw.model_category
+        ? raw.model_category
+        : "chat",
     });
   }
   out.sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id));
   return out;
+}
+
+/**
+ * 只保留 chat 模型，把纯生图/视频/音频模型（par model_category=image|video|audio|…）
+ * 从 Claude Code / Codex 的模型下拉里剔除。category 缺省（旧 par/旧缓存）按 chat 放行。
+ */
+export function filterChatModels(entries: TakoModelEntry[]): TakoModelEntry[] {
+  return entries.filter((e) => !e.category || e.category === "chat");
 }
 
 /**
