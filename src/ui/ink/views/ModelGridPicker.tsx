@@ -171,8 +171,13 @@ export function ModelGridPicker({
     <Box flexDirection="column" marginTop={0} borderStyle="round" borderColor={color} paddingX={1} paddingY={0}>
       <Text bold color={color}>▣ {zh ? "选择模型" : "Pick Model"}</Text>
       <Box flexDirection="column" marginTop={0}>
-        {grid.groups.map((group) => (
+        {grid.groups.map((group, gi) => (
           <Box key={group.family} flexDirection="column" marginTop={0}>
+            {gi > 0 && (
+              <Box>
+                <Text dimColor>{"╌".repeat(Math.max(8, cellWidth * columnCount))}</Text>
+              </Box>
+            )}
             {group.rows.map((row, rowIdx) => (
               <Box key={`${group.family}-${rowIdx}`}>
                 {row.map((id) => {
