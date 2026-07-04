@@ -312,16 +312,6 @@ function ctxStrOf(ctx: number): string {
 }
 
 /**
- * 启发式：明显是 OpenAI 家族的模型，不应该出现在 Claude Code（Anthropic 协议）下拉里。
- * 兜底用——par 服务端把模型标 api_type='all' 时（默认值），过滤还是会把 GPT/o-series
- * 也吐出来。规则保守：只挡明确的 OpenAI prefix，避免误伤 deepseek / kimi / qwen 等同时
- * 提供 Anthropic 兼容的国内模型。
- */
-function isObviouslyOpenAIModel(id: string): boolean {
-  return /^(gpt[-_]|chatgpt[-_]|o\d+([-_]|$)|davinci[-_]|text-davinci[-_]|openai[-_/])/i.test(id);
-}
-
-/**
  * 优先用 par 服务器返回的 claude 系模型目录（tako/custom provider）。
  * 没缓存（首次启动 / 网络失败）时回退到内置 whitelist。
  */
@@ -329,9 +319,7 @@ function buildDynamicClaudeModels(provider: Provider): LaunchOption[] | null {
   if (!provider.baseUrl) return null;
   const raw = getTakoModels(provider.baseUrl, "claude");
   if (!raw || raw.length === 0) return null;
-  const entries = raw.filter((e) => !isObviouslyOpenAIModel(e.id));
-  if (entries.length === 0) return null;
-  return entries.map((e) => {
+  return raw.map((e) => {
     const modelArg = appendOneMTagIfNeeded(e.id);
     return {
       id: `model-${e.id}`,

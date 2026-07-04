@@ -12,6 +12,7 @@ import { log } from "../logger";
 import { t } from "../i18n";
 import { track, hashProjectPath } from "../analytics";
 import { launchClient as legacyLaunchClient } from "../launcher-legacy";
+import { recordModelPicks } from "../model-usage";
 
 export interface LaunchOptions {
   projectPath?: string;
@@ -108,6 +109,12 @@ export async function launchClientUnified(
     }
 
     await recordProjectLaunch(workingDir, client.id, options?.selectedOptionIds);
+    try {
+      const pickedModelIds = (options?.selectedOptionIds ?? []).filter((id) => id.startsWith("model-"));
+      await recordModelPicks(pickedModelIds);
+    } catch {
+      // Usage ranking is best-effort and must never block launching a client.
+    }
 
     const config = await loadConfig();
     const clientVersion = config.installedClients[client.id]?.version;
