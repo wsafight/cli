@@ -9,6 +9,8 @@ import { Box, Text } from "ink";
 import type { LaunchOption } from "../../../clients";
 import type { Provider } from "../../../providers/types";
 
+export const COLLAPSED_MODEL_LIMIT = 6;
+
 const PICKER_FOOTER_HINTS = [
   ["↑↓", "选择", "select"],
   ["Enter", "确认", "confirm"],
@@ -17,7 +19,7 @@ const PICKER_FOOTER_HINTS = [
 
 function PickerFooter({ zh }: { zh: boolean }) {
   return (
-    <Box marginTop={1} justifyContent="center" gap={2}>
+    <Box marginTop={0} justifyContent="center" gap={2}>
       {PICKER_FOOTER_HINTS.flatMap((h, i) => {
         const sep = i > 0 ? <Text key={`s${i}`} dimColor>│</Text> : null;
         return [
@@ -38,9 +40,9 @@ export function ProviderPicker({
   provs: Provider[]; provIdx: number; pickerIdx: number; color: string; zh: boolean;
 }) {
   return (
-    <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor={color} paddingX={2} paddingY={1}>
+    <Box flexDirection="column" marginTop={0} borderStyle="round" borderColor={color} paddingX={1} paddingY={0}>
       <Text bold color={color}>▣ {zh ? "选择服务商" : "Pick Provider"}</Text>
-      <Box flexDirection="column" marginTop={1}>
+      <Box flexDirection="column" marginTop={0}>
         {provs.length === 0 && (
           <Box paddingLeft={1}>
             <Text dimColor>{zh ? "暂无兼容此工具的服务商" : "No compatible providers"}</Text>
@@ -84,8 +86,47 @@ export function ProviderPicker({
 
 // ─── 模型 group picker ──────────────────────────────────────
 
+export function visibleModelOptions(
+  groupOpts: LaunchOption[],
+  enabled: Set<string>,
+  pickCounts: Record<string, number>,
+  expanded: boolean,
+): { list: LaunchOption[]; hiddenCount: number } {
+  const hasCounts = groupOpts.some((opt) => (pickCounts[opt.id] ?? 0) > 0);
+  if (expanded || !hasCounts) {
+    return { list: groupOpts, hiddenCount: 0 };
+  }
+
+  const order = new Map(groupOpts.map((opt, idx) => [opt.id, idx]));
+  const topIds = groupOpts
+    .filter((opt) => (pickCounts[opt.id] ?? 0) > 0)
+    .sort((a, b) => {
+      const countDiff = (pickCounts[b.id] ?? 0) - (pickCounts[a.id] ?? 0);
+      if (countDiff !== 0) return countDiff;
+      return (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
+    })
+    .slice(0, COLLAPSED_MODEL_LIMIT)
+    .map((opt) => opt.id);
+
+  const visibleIds = new Set<string>(topIds);
+  for (const opt of groupOpts) {
+    if (enabled.has(opt.id)) visibleIds.add(opt.id);
+  }
+
+  const list = groupOpts.filter((opt) => visibleIds.has(opt.id));
+  return { list, hiddenCount: groupOpts.length - list.length };
+}
+
+export function initialModelPickerMode(
+  groupOpts: LaunchOption[],
+  pickCounts: Record<string, number>,
+): "collapsed" | "grid" {
+  const hasCounts = groupOpts.some((opt) => (pickCounts[opt.id] ?? 0) > 0);
+  return !hasCounts && groupOpts.length > COLLAPSED_MODEL_LIMIT ? "grid" : "collapsed";
+}
+
 export function GroupPicker({
-  group, options, enabled, pickerIdx, color, zh,
+  group, options, enabled, pickerIdx, color, zh, pickCounts = {}, expanded = true,
 }: {
   group: string;
   options: LaunchOption[];
@@ -93,14 +134,20 @@ export function GroupPicker({
   pickerIdx: number;
   color: string;
   zh: boolean;
+  pickCounts?: Record<string, number>;
+  expanded?: boolean;
 }) {
   const groupOpts = options.filter((o) => o.group === group);
+  const visible =
+    group === "model"
+      ? visibleModelOptions(groupOpts, enabled, pickCounts, expanded)
+      : { list: groupOpts, hiddenCount: 0 };
   const title = group === "model" ? (zh ? "选择模型" : "Pick Model") : group;
   const isDefaultCur = !groupOpts.some((o) => enabled.has(o.id));
   return (
-    <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor={color} paddingX={2} paddingY={1}>
+    <Box flexDirection="column" marginTop={0} borderStyle="round" borderColor={color} paddingX={1} paddingY={0}>
       <Text bold color={color}>▣ {title}</Text>
-      <Box flexDirection="column" marginTop={1}>
+      <Box flexDirection="column" marginTop={0}>
         {/* 默认（清空） */}
         {(() => {
           const focused = pickerIdx === 0;
@@ -116,7 +163,7 @@ export function GroupPicker({
             </Box>
           );
         })()}
-        {groupOpts.map((opt, i) => {
+        {visible.list.map((opt, i) => {
           const focused = pickerIdx === i + 1;
           const isCur = enabled.has(opt.id);
           return (
@@ -139,6 +186,17 @@ export function GroupPicker({
             </Box>
           );
         })}
+        {visible.hiddenCount > 0 && (
+          <Box paddingLeft={1}>
+            <Text color={pickerIdx === visible.list.length + 1 ? color : undefined} bold={pickerIdx === visible.list.length + 1}>
+              {pickerIdx === visible.list.length + 1 ? "▸" : " "}
+            </Text>
+            <Text bold={pickerIdx === visible.list.length + 1} color={pickerIdx === visible.list.length + 1 ? color : undefined}>
+              {" "}{zh ? `▾ 显示全部 (${visible.hiddenCount})` : `▾ Show all (${visible.hiddenCount})`}
+            </Text>
+            <Text dimColor> ›</Text>
+          </Box>
+        )}
       </Box>
       <PickerFooter zh={zh} />
     </Box>
