@@ -34,11 +34,6 @@ export function getGridColumnCountForOptions(
   return getGridColumnCountForLabels(labels, terminalColumns);
 }
 
-export function getGridColumnCount(ids: string[], terminalColumns: number): number {
-  if (ids.length === 0) return 1;
-  return getGridColumnCountForLabels(ids, terminalColumns);
-}
-
 export function buildGrid(ids: string[], columns: number): ModelGrid {
   const colCount = Math.max(1, Math.min(MAX_PER_LINE, Math.floor(columns) || 1));
   const rows: string[][] = [];
@@ -54,7 +49,10 @@ function rawModelId(id: string): string {
 
 export function modelFamilyOf(id: string): string {
   const raw = rawModelId(id).toLowerCase();
-  return raw.slice(0, 3) || raw;
+  // "full-" / "满血-" 是变体修饰词，不是厂商。不剥掉的话 full-claude / full-gpt / full-glm
+  // 会全部 slice(0,3) 撞成 "ful" 家族，跨厂商混在同一组。
+  const stripped = raw.replace(/^(?:full[-_]|满血[-_])+/u, "");
+  return stripped.slice(0, 3) || raw.slice(0, 3) || raw;
 }
 
 function familyRank(family: string): number {
@@ -173,8 +171,13 @@ export function ModelGridPicker({
     <Box flexDirection="column" marginTop={0} borderStyle="round" borderColor={color} paddingX={1} paddingY={0}>
       <Text bold color={color}>▣ {zh ? "选择模型" : "Pick Model"}</Text>
       <Box flexDirection="column" marginTop={0}>
-        {grid.groups.map((group) => (
+        {grid.groups.map((group, gi) => (
           <Box key={group.family} flexDirection="column" marginTop={0}>
+            {gi > 0 && (
+              <Box>
+                <Text dimColor>{"╌".repeat(Math.max(8, cellWidth * columnCount))}</Text>
+              </Box>
+            )}
             {group.rows.map((row, rowIdx) => (
               <Box key={`${group.family}-${rowIdx}`}>
                 {row.map((id) => {

@@ -19,7 +19,7 @@ describe("model picker grid and collapsed visibility", () => {
   it("shows all model options for new users without pick counts", () => {
     const options = ["model-a", "model-b", "model-c"].map(model);
 
-    const result = visibleModelOptions(options, new Set(), {}, false);
+    const result = visibleModelOptions(options, new Set(), {});
 
     expect(result.list.map((o) => o.id)).toEqual(["model-a", "model-b", "model-c"]);
     expect(result.hiddenCount).toBe(0);
@@ -37,7 +37,7 @@ describe("model picker grid and collapsed visibility", () => {
       "model-h",
     ].map(model);
 
-    const result = visibleModelOptions(options, new Set(), {}, false);
+    const result = visibleModelOptions(options, new Set(), {});
 
     expect(result.list.map((o) => o.id)).toEqual([
       "model-a",
@@ -76,7 +76,6 @@ describe("model picker grid and collapsed visibility", () => {
         "model-f": 50,
         "model-g": 40,
       },
-      false,
     );
 
     expect(result.list.map((o) => o.id)).toEqual([
@@ -92,15 +91,6 @@ describe("model picker grid and collapsed visibility", () => {
     expect(initialModelPickerMode(options, { "model-b": 90 })).toBe("collapsed");
   });
 
-  it("returns every option when expanded", () => {
-    const options = ["model-a", "model-b", "model-c"].map(model);
-
-    const result = visibleModelOptions(options, new Set(), { "model-b": 1 }, true);
-
-    expect(result.list.map((o) => o.id)).toEqual(["model-a", "model-b", "model-c"]);
-    expect(result.hiddenCount).toBe(0);
-  });
-
   it("builds rows and flat model ids with the requested column count", () => {
     const result = buildGrid(["a", "b", "c", "d", "e"], 3);
 
@@ -111,12 +101,17 @@ describe("model picker grid and collapsed visibility", () => {
     expect(result.flat).toEqual(["a", "b", "c", "d", "e"]);
   });
 
-  it("groups model ids by the first three model-id characters", () => {
+  it("groups model ids by the underlying vendor family", () => {
     expect(modelFamilyOf("model-gpt-5.5")).toBe("gpt");
     expect(modelFamilyOf("model-glm-5.2")).toBe("glm");
     expect(modelFamilyOf("model-qwen3.7-max")).toBe("qwe");
     expect(modelFamilyOf("model-deepseek-v4-pro")).toBe("dee");
-    expect(modelFamilyOf("model-full-claude-opus-4-8")).toBe("ful");
+    // 回归: "full-" / "满血-" 是变体修饰词,必须剥掉,否则 full-claude/full-gpt/full-glm
+    // 会全部撞成 "ful" 家族跨厂商混在一起 (INV-MODEL-FAMILY-PREFIX)。
+    expect(modelFamilyOf("model-full-claude-opus-4-8")).toBe("cla");
+    expect(modelFamilyOf("model-full-gpt-5")).toBe("gpt");
+    expect(modelFamilyOf("model-full-glm-5")).toBe("glm");
+    expect(modelFamilyOf("model-满血-claude-opus-4-8")).toBe("cla");
   });
 
   it("sorts larger model numbers before smaller model numbers in the same family", () => {

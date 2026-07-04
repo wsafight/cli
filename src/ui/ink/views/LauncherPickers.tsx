@@ -90,10 +90,9 @@ export function visibleModelOptions(
   groupOpts: LaunchOption[],
   enabled: Set<string>,
   pickCounts: Record<string, number>,
-  expanded: boolean,
 ): { list: LaunchOption[]; hiddenCount: number } {
   const hasCounts = groupOpts.some((opt) => (pickCounts[opt.id] ?? 0) > 0);
-  if (expanded || !hasCounts) {
+  if (!hasCounts) {
     return { list: groupOpts, hiddenCount: 0 };
   }
 
@@ -126,7 +125,7 @@ export function initialModelPickerMode(
 }
 
 export function GroupPicker({
-  group, options, enabled, pickerIdx, color, zh, pickCounts = {}, expanded = true,
+  group, options, enabled, pickerIdx, color, zh, pickCounts = {},
 }: {
   group: string;
   options: LaunchOption[];
@@ -135,12 +134,11 @@ export function GroupPicker({
   color: string;
   zh: boolean;
   pickCounts?: Record<string, number>;
-  expanded?: boolean;
 }) {
   const groupOpts = options.filter((o) => o.group === group);
   const visible =
     group === "model"
-      ? visibleModelOptions(groupOpts, enabled, pickCounts, expanded)
+      ? visibleModelOptions(groupOpts, enabled, pickCounts)
       : { list: groupOpts, hiddenCount: 0 };
   const title = group === "model" ? (zh ? "选择模型" : "Pick Model") : group;
   const isDefaultCur = !groupOpts.some((o) => enabled.has(o.id));

@@ -353,7 +353,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
         initIdx = gridIndexOf(ids, cur.id, columnCount);
       } else {
         const visible = group === "model"
-          ? visibleModelOptions(groupOpts, enabled, pickCounts, false).list
+          ? visibleModelOptions(groupOpts, enabled, pickCounts).list
           : groupOpts;
         initIdx = visible.findIndex((o) => o.id === cur.id) + 1;
       }
@@ -421,7 +421,11 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
             setPickingGroup(null);
           } else {
             setModelPickerMode("collapsed");
-            setPickerIdx(0);
+            // 回到折叠态时把焦点还原到当前选中项（没有选中则落到「默认/清空」），
+            // 而不是无脑跳回第一行。
+            const cur = getGroupSelection(options, enabled, pickingGroup);
+            const visibleList = visibleModelOptions(groupOpts, enabled, pickCounts).list;
+            setPickerIdx(cur ? Math.max(0, visibleList.findIndex((o) => o.id === cur.id) + 1) : 0);
           }
           return;
         }
@@ -468,7 +472,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
       }
 
       const visible = isModelGroup
-        ? visibleModelOptions(groupOpts, enabled, pickCounts, false)
+        ? visibleModelOptions(groupOpts, enabled, pickCounts)
         : { list: groupOpts, hiddenCount: 0 };
       const pickerLen = visible.list.length + 1 + (visible.hiddenCount > 0 ? 1 : 0);
       if (key.escape || input === "q") { setPickingGroup(null); setModelPickerMode("collapsed"); return; }
@@ -661,7 +665,6 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
             color={cs.color}
             zh={zh}
             pickCounts={pickCounts}
-            expanded={pickingGroup !== "model"}
           />
         ) : (
           <>

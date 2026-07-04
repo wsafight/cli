@@ -5,7 +5,7 @@ import type { ProviderContext, Provider } from "../providers/types";
 import { DEEPSEEK_ANTHROPIC_URL, resolveXiaomiBaseUrl } from "../providers/types";
 import { log } from "../logger";
 import { t } from "../i18n";
-import { loadCatalog, getTakoModels } from "../models";
+import { loadCatalog, getTakoModels, filterChatModels } from "../models";
 import { BUNDLED_ENTRIES } from "../models/bundled";
 import { TAKO_DIR } from "../config";
 
@@ -319,7 +319,9 @@ function buildDynamicClaudeModels(provider: Provider): LaunchOption[] | null {
   if (!provider.baseUrl) return null;
   const raw = getTakoModels(provider.baseUrl, "claude");
   if (!raw || raw.length === 0) return null;
-  return raw.map((e) => {
+  const chat = filterChatModels(raw);
+  if (chat.length === 0) return null;
+  return chat.map((e) => {
     const modelArg = appendOneMTagIfNeeded(e.id);
     return {
       id: `model-${e.id}`,
