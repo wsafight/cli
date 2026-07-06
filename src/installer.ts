@@ -6,6 +6,7 @@ import { loadConfig, updateConfig, TAKO_DIR, TAKO_BUN_DIR, TAKO_BUN_BIN, TAKO_BU
 import { getNpmRegistry, getBunInstallCommand, detectRegion, showRegionInfo, getBunMirrorDownloadUrl } from "./region";
 import { track } from "./analytics";
 import { streamBunInstall } from "./bun-progress";
+import { summarizeInstallError } from "./error-format";
 
 // Tako 专属 Bun 路径（完全隔离，不使用系统 Bun）
 // 重要：永远不要使用系统 Bun，只使用 Tako 专属的
@@ -701,7 +702,7 @@ async function placeNativeBinary(client: ClientConfig, clientDir: string): Promi
 export async function installClient(
   client: ClientConfig,
   forceUpdate = false
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; skippedUpdate?: boolean }> {
   const s = createSpinner();
   const clientDir = getClientDir(client.id);
 
@@ -776,14 +777,14 @@ export async function installClient(
     const exitCode = await proc.exited;
 
     if (exitCode !== 0) {
-      s.stop(`${action} ${client.name} 失败`);
+      s.stop();
       // INV-INST-03：失败不留半残状态。
       // - 全新安装失败：清掉刚写的占位 package.json，让目录回到"未初始化"。
       // - 更新失败：保留 node_modules（已保留，未删），旧版本仍可用。
       if (!isInstalled) {
         await fs.rm(packageJsonPath, { force: true }).catch(() => {});
       }
-      return { success: false, error: output || "未知错误" };
+      return { success: false, error: summarizeInstallError(output) };
     }
 
     // 确保平台原生二进制就位（Bun 不自动安装 optionalDependencies）
@@ -820,10 +821,10 @@ export async function installClient(
     s.stop(`${client.name} ${action}完成`);
     return { success: true };
   } catch (error) {
-    s.stop(`操作失败`);
+    s.stop();
     return {
       success: false,
-      error: error instanceof Error ? error.message : "未知错误",
+      error: summarizeInstallError(error instanceof Error ? error.message : undefined),
     };
   }
 }
@@ -967,8 +968,11 @@ export async function ensureClientReady(
     const result = await installClient(client, true);
     if (result.success) {
       await ensureNativeBinary(client);
+      return result;
     }
-    return result;
+    log.warn(`更新 ${client.name} 失败：${result.error ?? "未知错误"}`);
+    log.info("继续使用当前已安装版本");
+    return { success: true, skippedUpdate: true, error: result.error };
   }
 
   return { success: true };

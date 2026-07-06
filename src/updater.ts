@@ -6,6 +6,7 @@ import { t } from "./i18n";
 import { track } from "./analytics";
 import { streamBunInstall } from "./bun-progress";
 import { buildWindowsCmdWrapper, buildWindowsPs1Wrapper } from "./windows-wrapper";
+import { summarizeInstallError } from "./error-format";
 
 // Tako CLI 包名
 const PACKAGE_NAME = "tako-cli";
@@ -157,11 +158,13 @@ async function performUpdate(latestVersion: string): Promise<boolean> {
       s.stop(`更新成功！已更新到 v${latestVersion}`);
       return true;
     } else {
-      s.stop(`更新失败: ${output || "未知错误"}`);
+      s.stop();
+      log.warn(`更新失败: ${summarizeInstallError(output)}`);
       return false;
     }
   } catch (error) {
-    s.stop(`更新失败: ${error instanceof Error ? error.message : "未知错误"}`);
+    s.stop();
+    log.warn(`更新失败: ${summarizeInstallError(error instanceof Error ? error.message : undefined)}`);
     return false;
   }
 }
