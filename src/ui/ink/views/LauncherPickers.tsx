@@ -8,8 +8,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { LaunchOption } from "../../../clients";
 import type { Provider } from "../../../providers/types";
-
-export const COLLAPSED_MODEL_LIMIT = 6;
+import { visibleModelOptions } from "../../shared/model-picker";
 
 const PICKER_FOOTER_HINTS = [
   ["↑↓", "选择", "select"],
@@ -85,44 +84,6 @@ export function ProviderPicker({
 }
 
 // ─── 模型 group picker ──────────────────────────────────────
-
-export function visibleModelOptions(
-  groupOpts: LaunchOption[],
-  enabled: Set<string>,
-  pickCounts: Record<string, number>,
-): { list: LaunchOption[]; hiddenCount: number } {
-  const hasCounts = groupOpts.some((opt) => (pickCounts[opt.id] ?? 0) > 0);
-  if (!hasCounts) {
-    return { list: groupOpts, hiddenCount: 0 };
-  }
-
-  const order = new Map(groupOpts.map((opt, idx) => [opt.id, idx]));
-  const topIds = groupOpts
-    .filter((opt) => (pickCounts[opt.id] ?? 0) > 0)
-    .sort((a, b) => {
-      const countDiff = (pickCounts[b.id] ?? 0) - (pickCounts[a.id] ?? 0);
-      if (countDiff !== 0) return countDiff;
-      return (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
-    })
-    .slice(0, COLLAPSED_MODEL_LIMIT)
-    .map((opt) => opt.id);
-
-  const visibleIds = new Set<string>(topIds);
-  for (const opt of groupOpts) {
-    if (enabled.has(opt.id)) visibleIds.add(opt.id);
-  }
-
-  const list = groupOpts.filter((opt) => visibleIds.has(opt.id));
-  return { list, hiddenCount: groupOpts.length - list.length };
-}
-
-export function initialModelPickerMode(
-  groupOpts: LaunchOption[],
-  pickCounts: Record<string, number>,
-): "collapsed" | "grid" {
-  const hasCounts = groupOpts.some((opt) => (pickCounts[opt.id] ?? 0) > 0);
-  return !hasCounts && groupOpts.length > COLLAPSED_MODEL_LIMIT ? "grid" : "collapsed";
-}
 
 export function GroupPicker({
   group, options, enabled, pickerIdx, color, zh, pickCounts = {},

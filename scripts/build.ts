@@ -16,32 +16,63 @@ mkdirSync(stubDir, { recursive: true });
 writeFileSync(`${stubDir}/index.js`, "export default {initialize(){},connectToDevTools(){}};");
 writeFileSync(`${stubDir}/package.json`, '{"name":"react-devtools-core","version":"0.0.0","main":"index.js"}');
 
-const result = await Bun.build({
-  entrypoints: ["src/index.ts"],
+const commonBuildOptions = {
   outdir: "dist",
-  naming: "index.js",
   minify: true,
-  target: "bun",
+  target: "bun" as const,
   define: {
     "process.env.VERSION": JSON.stringify(version),
   },
-});
+};
 
-if (result.success) {
+const builds = [
+  {
+    label: "Ink",
+    entrypoints: ["src/index-ink.ts"],
+    naming: "index-ink.js",
+  },
+  {
+    label: "OpenTUI",
+    entrypoints: ["src/index-opentui.ts"],
+    naming: "index-opentui.js",
+    external: ["@opentui/core"],
+  },
+];
+
+mkdirSync("dist", { recursive: true });
+
+for (const build of builds) {
+  const result = await Bun.build({
+    ...commonBuildOptions,
+    ...build,
+  });
+
+  if (!result.success) {
+    console.error(`${build.label} build failed:`);
+    result.logs.forEach((log) => console.error(log));
+    process.exit(1);
+  }
+
   const file = result.outputs[0];
   const size = (file.size / 1024).toFixed(2);
-  console.log(`  ✓ dist/index.js (${size} KB)`);
-
-  // 确保有 shebang，这样 Unix 系统可以直接执行
-  // Windows 不使用 shebang，有没有都不影响
-  let content = await Bun.file("dist/index.js").text();
-  if (!content.startsWith("#!/usr/bin/env bun")) {
-    content = "#!/usr/bin/env bun\n" + content;
-    await Bun.write("dist/index.js", content);
-    console.log(`  ✓ 已添加 shebang`);
-  }
-} else {
-  console.error("Build failed:");
-  result.logs.forEach((log) => console.error(log));
-  process.exit(1);
+  console.log(`  ✓ dist/${build.naming} (${size} KB)`);
 }
+
+await Bun.write(
+  "dist/index.js",
+  `#!/usr/bin/env bun
+const isOpentuiMissing = (error) => {
+  const code = error?.code;
+  const message = error instanceof Error ? error.message : String(error);
+  return code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND" || /@opentui\\/core/.test(message);
+};
+const inkUrl = new URL("./index-ink.js", import.meta.url).href;
+try {
+  await import(new URL("./index-opentui.js", import.meta.url).href);
+} catch (error) {
+  if (!isOpentuiMissing(error)) throw error;
+  await import(inkUrl);
+}
+`,
+);
+console.log("  ✓ dist/index.js (platform dispatcher)");

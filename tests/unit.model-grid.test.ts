@@ -1,7 +1,15 @@
 import { describe, it, expect } from "bun:test";
 import type { LaunchOption } from "../src/clients";
-import { initialModelPickerMode, visibleModelOptions } from "../src/ui/ink/views/LauncherPickers";
-import { buildGroupedGrid, buildGrid, compareModelIdsForPicker, getGridColumnCountForLabels, gridIndexOf, modelFamilyOf } from "../src/ui/ink/views/ModelGridPicker";
+import {
+  buildGroupedGrid,
+  buildGrid,
+  compareModelIdsForPicker,
+  getGridColumnCountForLabels,
+  gridIndexOf,
+  initialModelPickerMode,
+  modelFamilyOf,
+  visibleModelOptions,
+} from "../src/ui/shared/model-picker";
 
 function model(id: string): LaunchOption {
   return {

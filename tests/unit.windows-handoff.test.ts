@@ -56,16 +56,16 @@ describe("Windows handoff script", () => {
     const script = buildWindowsHandoffScript({
       command: ["C:\\claude.exe"],
       cwd: "C:\\repo",
-      relaunchCommand: ["C:\\Tako\\bun.exe", "C:\\Tako\\dist\\index.js"],
+      relaunchCommand: ["C:\\Tako\\bin\\tako.cmd"],
     });
 
     // 重开命令在 finally 内、且在删除临时脚本之后（先删 token 再重开）
     const finallyIdx = script.indexOf("} finally {");
     const removeIdx = script.indexOf("Remove-Item -LiteralPath $scriptPath");
-    const relaunchIdx = script.indexOf("& 'C:\\Tako\\bun.exe' @relaunchArgv");
+    const relaunchIdx = script.indexOf("& 'C:\\Tako\\bin\\tako.cmd' @relaunchArgv");
     expect(finallyIdx).toBeGreaterThan(-1);
     expect(relaunchIdx).toBeGreaterThan(removeIdx);
-    expect(script).toContain("$relaunchArgv = @('C:\\Tako\\dist\\index.js')");
+    expect(script).toContain("$relaunchArgv = @()");
   });
 
   it("omits relaunch when relaunchCommand is empty or absent", () => {

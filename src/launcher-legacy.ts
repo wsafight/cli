@@ -1,11 +1,50 @@
 import { ClientConfig, getClientBinPath, getClientEntryPath } from "./clients/base";
+import { TAKO_DIR } from "./config";
 import { getBunPath } from "./installer";
 import { WINDOWS_HANDOFF_ENV, writeWindowsHandoffScript } from "./windows-handoff";
+import { join } from "path";
 
 // LaunchOptions 的权威定义在 ./launcher/index.ts；这里复用避免字段漂移。
 // import type 不引入运行时依赖，不会和 launcher/index.ts 对本模块的 import 形成循环。
 export type { LaunchOptions } from "./launcher";
 import type { LaunchOptions } from "./launcher";
+
+async function settleTerminalForInteractiveChild(isWindows: boolean): Promise<void> {
+  try {
+    process.stdin.removeAllListeners();
+    if (!isWindows && process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+    process.stdin.pause();
+  } catch { /* ignore */ }
+
+  if (!isWindows && process.stdout.isTTY) {
+    try {
+      process.stdout.write(
+        "\x1b[?1000l" +
+        "\x1b[?1002l" +
+        "\x1b[?1003l" +
+        "\x1b[?1005l" +
+        "\x1b[?1006l" +
+        "\x1b[?1015l" +
+        "\x1b[?1049l" +
+        "\x1b[?2004l" +
+        "\x1b[0m" +
+        "\x1b[?25h",
+      );
+    } catch { /* ignore */ }
+  }
+
+  await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+  try {
+    process.stdin.removeAllListeners();
+    if (!isWindows && process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+    process.stdin.pause();
+  } catch { /* ignore */ }
+}
 
 /**
  * 启动客户端。
@@ -107,11 +146,10 @@ export async function launchClient(
         // 由顶层 cmd/PowerShell 起客户端 —— 这样 Windows 控制台输入能干净交接给
         // 子进程，键盘才有响应（Bun 作为父进程直接 spawn 会渲染出画面但收不到键）。
         // handoff 由 wrapper 执行，wrapper 环境没有 token，故需显式写 extraEnv。
-        // 客户端退出后 handoff 重新拉起 tako（bun + 当前 tako 入口），用户回到菜单。
-        // process.argv = [bunExe, takoEntry, ...userArgs]；重开面板不带用户参数。
-        const relaunchCommand = [process.argv[0], process.argv[1]].filter(
-          (a): a is string => typeof a === "string" && a.length > 0,
-        );
+        // 客户端退出后 handoff 重新拉起 tako.cmd，用户回到菜单。
+        // 这里必须走 wrapper，不能直接用 `bun dist/index.js`：下一次从菜单启动
+        // 客户端时还需要外层 wrapper 在 Bun 退出后执行新的 handoff 脚本。
+        const relaunchCommand = [join(TAKO_DIR, "bin", "tako.cmd")];
         await writeWindowsHandoffScript(
           handoffPath,
           {
@@ -127,19 +165,8 @@ export async function launchClient(
       // 退化到下面的交互式 PowerShell 子进程路径（键盘可能不响应，但不中断）。
     }
 
-    async function releaseStdinForChild(): Promise<void> {
-      try {
-        process.stdin.removeAllListeners();
-        if (!isWindows && process.stdin.isTTY) {
-          process.stdin.setRawMode(false);
-        }
-        process.stdin.pause();
-      } catch { /* ignore */ }
-    }
-
     if (isWindows) {
       const fs = await import("fs/promises");
-      const { join } = await import("path");
       const { tmpdir } = await import("os");
       const handoffPath = join(tmpdir(), `tako-handoff-${process.pid}-${Date.now()}.ps1`);
       // 交互式路径由本进程直接起 PowerShell，PowerShell 继承本进程的 env，
@@ -152,7 +179,7 @@ export async function launchClient(
         },
       );
 
-      await releaseStdinForChild();
+      await settleTerminalForInteractiveChild(isWindows);
       try {
         const proc = Bun.spawn(
           ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", handoffPath],
@@ -174,18 +201,18 @@ export async function launchClient(
       }
     }
 
-    // 释放 stdin — 清除父进程（Ink / Bun）残留的监听器
+    // 释放 stdin — 清除父进程（TUI / Bun）残留的监听器
     //
-    // 背景：快捷启动前可能弹过 inkConfirm（更新确认 / 清理 settings），
-    // 交互式主菜单本身也是 Ink。Ink 会 setRawMode(true) 并挂 stdin 的
-    // "data"/"readable" 监听器。unmount 后这些监听器 + raw 状态不一定干净，
+    // 背景：快捷启动前可能弹过 confirmPrompt（更新确认 / 清理 settings），
+    // 交互式主菜单本身也是 TUI。这些都会 setRawMode(true) 并挂 stdin 的
+    // "data"/"readable" 监听器。退出后这些监听器 + raw 状态不一定干净，
     // 父进程 Bun 若继续读 stdin，会和子进程争抢按键 —— 表现为子进程 TUI
     // （Claude Code / Codex）画面渲染出来了，但按键无响应（"卡死"）。
     //
     // 所以启动子进程前必须移除父进程自己的监听器并 pause，把 stdin 完全让给
     // 子进程（子进程通过 stdio:"inherit" 独占）。
     //
-    await releaseStdinForChild();
+    await settleTerminalForInteractiveChild(isWindows);
 
     // 清空屏幕 + scrollback —— 否则 launcher 的 Ink 输出会留在终端历史里，
     // 子进程（如 Claude Code）启动后用户向上滚动会看到 Tako 菜单残留，

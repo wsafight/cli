@@ -6,34 +6,34 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
-import { getAllClients, type ClientConfig, type LaunchOption } from "../../../clients";
 import { getClientLaunchOptions } from "../../../clients/base";
-import {
-  getRecentProjectsForClient, getLastClientForCwd,
-  getLastSelectedOptionsForClient,
-  formatProjectPath, formatLastUsed, DISPLAY_PER_CLIENT,
-} from "../../../project-history";
-import {
-  getProvidersForClient, getDefaultProvider, getClientProvider, setClientProvider,
-  resolveProviderContext,
-} from "../../../providers";
+import { setClientProvider, resolveProviderContext } from "../../../providers";
 import type { Provider } from "../../../providers/types";
 import { getLocale } from "../../../i18n";
 import { getOfficialQuota, type OfficialQuota } from "../../../quota";
-import { getModelPickCounts } from "../../../model-usage";
-import { ProviderPicker, GroupPicker, initialModelPickerMode, visibleModelOptions } from "./LauncherPickers";
-import { ModelGridPicker, buildGroupedGrid, getGridColumnCountForOptions, gridIndexOf } from "./ModelGridPicker";
+import { loadLauncherData } from "../../shared/launcher-data";
+import {
+  buildOptionRows,
+  enabledWithProviderDefaultModel,
+  getGroupSelection,
+  selectedArgs,
+} from "../../shared/launch-options";
+import {
+  buildGroupedGrid,
+  getGridColumnCountForOptions,
+  gridIndexOf,
+  initialModelPickerMode,
+  modelPickerRowsInOrder,
+  visibleModelOptions,
+  type ModelPickerMode,
+} from "../../shared/model-picker";
+import type { LauncherClientData, LauncherLoadResult, LauncherResult } from "../../shared/types";
+import { ProviderPicker, GroupPicker } from "./LauncherPickers";
+import { ModelGridPicker } from "./ModelGridPicker";
+
+export type { LauncherResult } from "../../shared/types";
 
 const VERSION = process.env.VERSION || "dev";
-
-export type LauncherResult =
-  | { type: "launch"; clientId: string; projectPath?: string; args: string[]; envVars: Record<string, string>; selectedOptionIds: string[] }
-  | { type: "agent" }
-  | { type: "stats" }
-  | { type: "config" }
-  | { type: "language" }
-  | { type: "providers" }
-  | { type: "exit" };
 
 const CLIENT_STYLE: Record<string, { icon: string; color: string }> = {
   "claude-code": { icon: "✦", color: "yellow" },
@@ -41,76 +41,6 @@ const CLIENT_STYLE: Record<string, { icon: string; color: string }> = {
   gemini:        { icon: "◆", color: "cyan" },
 };
 const DEFAULT_STYLE = { icon: "▪", color: "white" };
-
-interface ProjectItem { label: string; hint: string; path?: string }
-interface ClientData {
-  client: ClientConfig;
-  projects: ProjectItem[];
-  providers: Provider[];    // 兼容的服务商列表
-  activeProvIdx: number;    // 当前绑定的服务商 index
-  launchOptions: LaunchOption[]; // 经 getClientLaunchOptions 扩充（含 Resume 等合成项）
-  lastSelectedOptionIds: string[]; // 上次启动时勾选的 option id（从持久化恢复）
-}
-
-interface LoadResult {
-  clients: ClientData[];
-  defaultIdx: number;
-  hasProviders: boolean;
-  pickCounts: Record<string, number>;
-}
-
-async function loadData(): Promise<LoadResult> {
-  const all = getAllClients();
-  const lastId = await getLastClientForCwd();
-  const defaultProv = await getDefaultProvider();
-  const zh = getLocale() === "zh";
-
-  const sorted = [...all].sort((a, b) => {
-    if (a.id === lastId) return -1;
-    if (b.id === lastId) return 1;
-    return 0;
-  });
-
-  const clients: ClientData[] = [];
-  for (const client of sorted) {
-    const recent = await getRecentProjectsForClient(client.id, DISPLAY_PER_CLIENT, true);
-    const cwd = process.cwd();
-    const projects: ProjectItem[] = [
-      { label: zh ? "在当前目录启动" : "Launch in current directory", hint: formatProjectPath(cwd, 45), path: cwd },
-      ...recent.map((p) => ({
-        label: formatProjectPath(p.path, 45),
-        hint: formatLastUsed(p.lastLaunchedAt),
-        path: p.path,
-      })),
-    ];
-    const compatible = await getProvidersForClient(client.id);
-    const bound = await getClientProvider(client.id);
-    const active = bound || compatible.find((p) => p.id === defaultProv?.id) || compatible[0];
-    const activeIdx = active ? compatible.findIndex((p) => p.id === active.id) : 0;
-    const launchOptions = getClientLaunchOptions(client, active);
-    const savedIds = await getLastSelectedOptionsForClient(client.id);
-    // 过滤掉已失效的 option id（client 升级后某些 option 可能被移除）
-    const validIds = launchOptions.map((o) => o.id);
-    const lastSelectedOptionIds = savedIds.filter((id) => validIds.includes(id));
-    clients.push({
-      client,
-      projects,
-      providers: compatible,
-      activeProvIdx: Math.max(activeIdx, 0),
-      launchOptions,
-      lastSelectedOptionIds,
-    });
-  }
-
-  const hasProviders = clients.some((c) => c.providers.length > 0);
-  let pickCounts: Record<string, number> = {};
-  try {
-    pickCounts = await getModelPickCounts();
-  } catch {
-    pickCounts = {};
-  }
-  return { clients, defaultIdx: 0, hasProviders, pickCounts };
-}
 
 // ─── 分隔线 ─────────────────────────────────────────
 
@@ -219,37 +149,8 @@ function QuotaLine({ quota, zh }: { quota: OfficialQuota; zh: boolean }) {
 
 type FocusArea = "projects" | "options";
 
-/**
- * 选项区可见行：要么是一个 flag（直接勾选），要么是一个 group 入口（点进去选）。
- */
-type OptionRow =
-  | { kind: "flag"; opt: LaunchOption }
-  | { kind: "group"; group: string; title: string }
-  | { kind: "provider"; title: string };
-
-function buildOptionRows(opts: LaunchOption[], zh: boolean): OptionRow[] {
-  const rows: OptionRow[] = [];
-  const seen = new Set<string>();
-  for (const o of opts) {
-    if (!o.group) {
-      rows.push({ kind: "flag", opt: o });
-    } else if (!seen.has(o.group)) {
-      seen.add(o.group);
-      const title = o.group === "model" ? (zh ? "模型" : "Model") : o.group;
-      rows.push({ kind: "group", group: o.group, title });
-    }
-  }
-  // 服务商入口固定放在最底部
-  rows.push({ kind: "provider", title: zh ? "服务商" : "Provider" });
-  return rows;
-}
-
-function getGroupSelection(opts: LaunchOption[], enabled: Set<string>, group: string): LaunchOption | undefined {
-  return opts.find((o) => o.group === group && enabled.has(o.id));
-}
-
 function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onResult }: {
-  clients: ClientData[]; defaultIdx: number; hasProviders: boolean;
+  clients: LauncherClientData[]; defaultIdx: number; hasProviders: boolean;
   pickCounts: Record<string, number>;
   onResult: (r: LauncherResult) => void;
 }) {
@@ -265,7 +166,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
   const [provMsg, setProvMsg] = useState("");
   /** 当前正在打开的 group picker（null = 主界面） */
   const [pickingGroup, setPickingGroup] = useState<string | null>(null);
-  const [modelPickerMode, setModelPickerMode] = useState<"collapsed" | "grid">("collapsed");
+  const [modelPickerMode, setModelPickerMode] = useState<ModelPickerMode>("collapsed");
   /** true = 服务商 picker（与 pickingGroup 互斥） */
   const [pickingProvider, setPickingProvider] = useState(false);
   const [pickerIdx, setPickerIdx] = useState(0);
@@ -316,27 +217,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
   //   1. 把 enabled 里已经失效的 option id 清掉（避免幽灵勾选）
   //   2. 若没有任何 model 被勾选，落到 provider.model 上（让 add provider 时挑的模型自动反映）
   useEffect(() => {
-    const validIds = new Set(options.map((o) => o.id));
-    const modelIds = new Set(options.filter((o) => o.group === "model").map((o) => o.id));
-    const provModelOptionId = currentProv?.model ? `model-${currentProv.model}` : undefined;
-    setEnabled((prev) => {
-      const next = new Set<string>();
-      let changed = false;
-      let hasModel = false;
-      for (const id of prev) {
-        if (validIds.has(id)) {
-          next.add(id);
-          if (modelIds.has(id)) hasModel = true;
-        } else {
-          changed = true;
-        }
-      }
-      if (!hasModel && provModelOptionId && modelIds.has(provModelOptionId)) {
-        next.add(provModelOptionId);
-        changed = true;
-      }
-      return changed ? next : prev;
-    });
+    setEnabled((prev) => enabledWithProviderDefaultModel(prev, options, currentProv?.model));
   }, [options, currentProv?.model]);
 
   const openGroupPicker = useCallback((group: string) => {
@@ -413,7 +294,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
         const ids = groupOpts.map((o) => o.id);
         const columnCount = getGridColumnCountForOptions(groupOpts, stdout.columns || 80, zh);
         const grid = buildGroupedGrid(ids, columnCount);
-        const rowsInOrder = grid.groups.flatMap((group) => group.rows);
+        const rowsInOrder = modelPickerRowsInOrder(ids, columnCount);
         const pickerLen = grid.flat.length;
         if (input === "q") { setPickingGroup(null); setModelPickerMode("collapsed"); return; }
         if (key.escape) {
@@ -487,7 +368,9 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
           });
         } else if (isModelGroup && visible.hiddenCount > 0 && pickerIdx === visible.list.length + 1) {
           const cur = getGroupSelection(options, enabled, pickingGroup);
-          const initIdx = cur ? groupOpts.findIndex((o) => o.id === cur.id) : 0;
+          const ids = groupOpts.map((o) => o.id);
+          const columnCount = getGridColumnCountForOptions(groupOpts, stdout.columns || 80, zh);
+          const initIdx = cur ? gridIndexOf(ids, cur.id, columnCount) : 0;
           setPickerIdx(Math.max(0, initIdx));
           setModelPickerMode("grid");
           return;
@@ -583,13 +466,8 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
 
       // 启动
       const project = projects[projectIdx];
-      const args: string[] = [];
-      const envVars: Record<string, string> = {};
-      const selectedOptionIds: string[] = [];
-      for (const opt of options) {
-        if (enabled.has(opt.id)) { args.push(...opt.args); if (opt.envVars) Object.assign(envVars, opt.envVars); selectedOptionIds.push(opt.id); }
-      }
-      onResult({ type: "launch", clientId: current.client.id, projectPath: project.path, args, envVars, selectedOptionIds });
+      const selected = selectedArgs({ launchOptions: options, enabled });
+      onResult({ type: "launch", clientId: current.client.id, projectPath: project.path, ...selected });
     }
   }, [focus, clientIdx, projectIdx, optionIdx, provIdx, provs, currentProv, current, projects, options, optionRows, enabled, clients, onResult, zh, pickingGroup, pickingProvider, pickerIdx, pickCounts, modelPickerMode, stdout.columns, openGroupPicker]));
 
@@ -808,8 +686,8 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
 }
 
 export function LauncherView({ onResult }: { onResult: (r: LauncherResult) => void }) {
-  const [data, setData] = useState<LoadResult | null>(null);
-  useEffect(() => { loadData().then(setData); }, []);
+  const [data, setData] = useState<LauncherLoadResult | null>(null);
+  useEffect(() => { loadLauncherData(45).then(setData); }, []);
   if (!data) return <Text dimColor>Loading...</Text>;
   return (
     <LauncherViewInner

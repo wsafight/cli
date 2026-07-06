@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { getTakoDir, getTakoCliDir, getBunBin, isWindows } from "./_helpers/paths";
 import { expectInTakoDir } from "./_helpers/assertions";
-import { getMockUpdateCommand } from "./_helpers/mocks";
+import { buildCliInstallCommand, buildCliUpdateCommand } from "../src/updater";
 
 describe("Update Logic - path configuration", () => {
   const takoDir = getTakoDir();
@@ -12,8 +12,7 @@ describe("Update Logic - path configuration", () => {
   });
 
   it("update command should not contain -g flag", () => {
-    const bunBin = getBunBin();
-    const command = getMockUpdateCommand(bunBin);
+    const command = buildCliUpdateCommand();
     expect(command).not.toContain("-g");
   });
 
@@ -33,15 +32,20 @@ describe("Update Logic - path configuration", () => {
   });
 
   it("update command should include package name", () => {
-    const bunBin = getBunBin();
-    const command = getMockUpdateCommand(bunBin);
+    const command = buildCliUpdateCommand();
     expect(command).toContain("tako-cli");
   });
 
   it("update command should use update subcommand with --latest", () => {
-    const bunBin = getBunBin();
-    const command = getMockUpdateCommand(bunBin);
+    const command = buildCliUpdateCommand();
     expect(command).toContain("update");
     expect(command).toContain("--latest");
+  });
+
+  it("update/install should keep optional dependencies for OpenTUI", () => {
+    expect(buildCliUpdateCommand()).not.toContain("--omit");
+    expect(buildCliUpdateCommand()).not.toContain("optional");
+    expect(buildCliInstallCommand()).not.toContain("--omit");
+    expect(buildCliInstallCommand()).not.toContain("optional");
   });
 });

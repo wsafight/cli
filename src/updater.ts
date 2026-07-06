@@ -14,6 +14,14 @@ const PACKAGE_NAME = "tako-cli";
 // 当前版本（构建时自动从 package.json 注入）
 export const CURRENT_VERSION = process.env.VERSION || "0.0.0";
 
+export function buildCliUpdateCommand(): string[] {
+  return [TAKO_BUN_BIN, "update", PACKAGE_NAME, "--latest"];
+}
+
+export function buildCliInstallCommand(): string[] {
+  return [TAKO_BUN_BIN, "add", `${PACKAGE_NAME}@latest`];
+}
+
 /**
  * 比较版本号
  * 返回: 1 表示 a > b, -1 表示 a < b, 0 表示相等
@@ -129,7 +137,7 @@ async function performUpdate(latestVersion: string): Promise<boolean> {
     // 在 Tako CLI 目录下执行更新
     // 使用 bun update --latest 强制更新到最新版本（bun add 受 lockfile 影响可能不会更新）
     const proc = Bun.spawn(
-      [TAKO_BUN_BIN, "update", PACKAGE_NAME, "--latest"],
+      buildCliUpdateCommand(),
       {
         cwd: TAKO_CLI_DIR,
         stdout: "pipe",
@@ -210,7 +218,7 @@ async function installToLocal(): Promise<boolean> {
 
     // 安装到本地
     const proc = Bun.spawn(
-      [TAKO_BUN_BIN, "add", `${PACKAGE_NAME}@latest`],
+      buildCliInstallCommand(),
       {
         cwd: TAKO_CLI_DIR,
         stdout: "pipe",
