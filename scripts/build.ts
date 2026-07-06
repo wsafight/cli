@@ -67,11 +67,16 @@ const isOpentuiMissing = (error) => {
   return code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND" || /@opentui\\/core/.test(message);
 };
 const inkUrl = new URL("./index-ink.js", import.meta.url).href;
-try {
-  await import(new URL("./index-opentui.js", import.meta.url).href);
-} catch (error) {
-  if (!isOpentuiMissing(error)) throw error;
+// Windows: OpenTUI 后端存在问题，直接使用 Ink 渲染后端
+if (process.platform === "win32") {
   await import(inkUrl);
+} else {
+  try {
+    await import(new URL("./index-opentui.js", import.meta.url).href);
+  } catch (error) {
+    if (!isOpentuiMissing(error)) throw error;
+    await import(inkUrl);
+  }
 }
 `,
 );
