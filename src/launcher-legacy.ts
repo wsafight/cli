@@ -1,6 +1,7 @@
 import { ClientConfig, getClientBinPath, getClientEntryPath } from "./clients/base";
 import { TAKO_DIR } from "./config";
 import { getBunPath } from "./installer";
+import { settleTerminalForExternalChild } from "./terminal-control";
 import { WINDOWS_HANDOFF_ENV, writeWindowsHandoffScript } from "./windows-handoff";
 import { join } from "path";
 
@@ -8,43 +9,6 @@ import { join } from "path";
 // import type 不引入运行时依赖，不会和 launcher/index.ts 对本模块的 import 形成循环。
 export type { LaunchOptions } from "./launcher";
 import type { LaunchOptions } from "./launcher";
-
-async function settleTerminalForInteractiveChild(isWindows: boolean): Promise<void> {
-  try {
-    process.stdin.removeAllListeners();
-    if (!isWindows && process.stdin.isTTY) {
-      process.stdin.setRawMode(false);
-    }
-    process.stdin.pause();
-  } catch { /* ignore */ }
-
-  if (!isWindows && process.stdout.isTTY) {
-    try {
-      process.stdout.write(
-        "\x1b[?1000l" +
-        "\x1b[?1002l" +
-        "\x1b[?1003l" +
-        "\x1b[?1005l" +
-        "\x1b[?1006l" +
-        "\x1b[?1015l" +
-        "\x1b[?1049l" +
-        "\x1b[?2004l" +
-        "\x1b[0m" +
-        "\x1b[?25h",
-      );
-    } catch { /* ignore */ }
-  }
-
-  await new Promise<void>((resolve) => setTimeout(resolve, 30));
-
-  try {
-    process.stdin.removeAllListeners();
-    if (!isWindows && process.stdin.isTTY) {
-      process.stdin.setRawMode(false);
-    }
-    process.stdin.pause();
-  } catch { /* ignore */ }
-}
 
 /**
  * 启动客户端。
@@ -127,6 +91,7 @@ export async function launchClient(
         // quick-launch：handoff 由外层 cmd/ps1 wrapper 执行，wrapper 进程环境里
         // 没有 client.getEnvVars() 算出的 token，故必须显式写进脚本。脚本用
         // finally 保证执行后自删，token 不残留。
+        await settleTerminalForExternalChild();
         await writeWindowsHandoffScript(
           handoffPath,
           {
@@ -149,7 +114,10 @@ export async function launchClient(
         // 客户端退出后 handoff 重新拉起 tako.cmd，用户回到菜单。
         // 这里必须走 wrapper，不能直接用 `bun dist/index.js`：下一次从菜单启动
         // 客户端时还需要外层 wrapper 在 Bun 退出后执行新的 handoff 脚本。
-        const relaunchCommand = [join(TAKO_DIR, "bin", "tako.cmd")];
+        const relaunchCommand = [
+          process.env.TAKO_WINDOWS_RELAUNCH_COMMAND || join(TAKO_DIR, "bin", "tako.cmd"),
+        ];
+        await settleTerminalForExternalChild();
         await writeWindowsHandoffScript(
           handoffPath,
           {
@@ -179,7 +147,7 @@ export async function launchClient(
         },
       );
 
-      await settleTerminalForInteractiveChild(isWindows);
+      await settleTerminalForExternalChild();
       try {
         const proc = Bun.spawn(
           ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", handoffPath],
@@ -212,7 +180,7 @@ export async function launchClient(
     // 所以启动子进程前必须移除父进程自己的监听器并 pause，把 stdin 完全让给
     // 子进程（子进程通过 stdio:"inherit" 独占）。
     //
-    await settleTerminalForInteractiveChild(isWindows);
+    await settleTerminalForExternalChild();
 
     // 清空屏幕 + scrollback —— 否则 launcher 的 Ink 输出会留在终端历史里，
     // 子进程（如 Claude Code）启动后用户向上滚动会看到 Tako 菜单残留，
