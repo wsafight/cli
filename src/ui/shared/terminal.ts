@@ -8,6 +8,15 @@ export interface AnnouncementPayload {
 
 type KeyDecision<T> = T | undefined;
 
+type PromptStdinLike = {
+  isTTY?: boolean;
+  isRaw?: boolean;
+  ref?: () => unknown;
+  removeAllListeners?: () => unknown;
+  setRawMode?: (enabled: boolean) => void;
+  pause?: () => unknown;
+};
+
 function restoreRawMode(previousRaw: boolean) {
   try {
     if (process.stdin.isTTY) process.stdin.setRawMode(previousRaw);
@@ -17,15 +26,38 @@ function restoreRawMode(previousRaw: boolean) {
   }
 }
 
+export async function settleStdinForTerminalPrompt(
+  stdin: PromptStdinLike = process.stdin,
+  delayMs = 30,
+): Promise<void> {
+  const release = () => {
+    try {
+      stdin.ref?.();
+      stdin.removeAllListeners?.();
+      if (stdin.isTTY && typeof stdin.setRawMode === "function") {
+        stdin.setRawMode(false);
+      }
+      stdin.pause?.();
+    } catch {
+      // Best-effort cleanup before a prompt reads directly from stdin.
+    }
+  };
+
+  release();
+  await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+  release();
+}
+
 async function readTerminalKey<T>(
   onChunk: (chunk: string) => KeyDecision<T>,
   fallback: T,
 ): Promise<T> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) return fallback;
 
-  return new Promise((resolve) => {
-    const previousRaw = Boolean((process.stdin as { isRaw?: boolean }).isRaw);
+  const previousRaw = Boolean((process.stdin as { isRaw?: boolean }).isRaw);
+  await settleStdinForTerminalPrompt();
 
+  return new Promise((resolve) => {
     const cleanup = () => {
       process.stdin.off("data", onData);
       restoreRawMode(previousRaw);

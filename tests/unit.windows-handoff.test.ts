@@ -24,6 +24,8 @@ describe("Windows handoff script", () => {
     expect(script).toContain("$env:ANTHROPIC_AUTH_TOKEN = 'sk-ant-''quoted'''");
     expect(script).toContain("$env:INVALID_KEY_NAME = 'skip'");
     expect(script).not.toContain("BAD-KEY");
+    expect(script).toContain("[Console]::InputEncoding = [System.Text.Encoding]::UTF8");
+    expect(script).toContain("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
     // 清屏用 [char]27 而非 `e，兼容 PowerShell 5.1
     expect(script).toContain("$esc = [char]27");
     expect(script).not.toContain("`e[2J");
@@ -80,7 +82,7 @@ describe("Windows handoff script", () => {
   it("encodes handoff scripts as UTF-8 with BOM for Windows PowerShell 5.1", () => {
     const script = buildWindowsHandoffScript({
       command: ["C:\\Windows\\System32\\cmd.exe", "/c", "echo", "ok"],
-      cwd: "C:\\Users\\46907\\WPSDrive\\685145570\\WPS云盘\\我的模板",
+      cwd: "E:\\smart\\marketing\\市场与销售\\抽奖",
       env: {
         TAKO_TEST_VALUE: "中文'value",
       },
@@ -89,7 +91,7 @@ describe("Windows handoff script", () => {
 
     expect(Array.from(bytes.slice(0, 3))).toEqual([0xef, 0xbb, 0xbf]);
     const decoded = new TextDecoder("utf-8").decode(bytes.slice(3));
-    expect(decoded).toContain("WPS云盘\\我的模板");
+    expect(decoded).toContain("市场与销售\\抽奖");
     expect(decoded).toContain("$env:TAKO_TEST_VALUE = '中文''value'");
   });
 });
