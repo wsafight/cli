@@ -15,8 +15,13 @@ import { listAvailableVersions, installAtVersion, getInstalledVersion } from "./
 import { IS_DEV } from "./config";
 
 const VERSION = process.env.VERSION || "dev";
+const STARTUP_AUTO_UPDATE_ENABLED = false;
 
 type UiMain = () => Promise<void>;
+
+export function shouldRunStartupUpdate(isDev: boolean): boolean {
+  return STARTUP_AUTO_UPDATE_ENABLED && !isDev;
+}
 
 function showHelp() {
   console.log(`
@@ -204,23 +209,23 @@ export async function runCli(main: UiMain): Promise<void> {
 
   // 快捷启动命令
   if (args.includes("--claude")) {
-    if (!isDev) await checkAndUpdate();
+    if (shouldRunStartupUpdate(isDev)) await checkAndUpdate();
     await quickLaunch("claude-code", "Claude Code", await buildPassthroughArgs("claude-code", args, "--claude"));
     return;
   }
   if (args.includes("--codex")) {
-    if (!isDev) await checkAndUpdate();
+    if (shouldRunStartupUpdate(isDev)) await checkAndUpdate();
     await quickLaunch("codex", "Codex", await buildPassthroughArgs("codex", args, "--codex"));
     return;
   }
   if (args.includes("--gemini")) {
-    if (!isDev) await checkAndUpdate();
+    if (shouldRunStartupUpdate(isDev)) await checkAndUpdate();
     await quickLaunch("gemini", "Gemini CLI", await buildPassthroughArgs("gemini", args, "--gemini"));
     return;
   }
 
-  // 检查自动更新
-  if (!isDev) await checkAndUpdate();
+  // 启动时自动更新临时禁用，优先直接进入工具/面板。
+  if (shouldRunStartupUpdate(isDev)) await checkAndUpdate();
 
   // 注入 statusline 配置到 Claude Code
   injectStatusLineConfig().catch(() => {});

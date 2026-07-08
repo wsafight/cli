@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { getTakoDir, getTakoCliDir, getBunBin, isWindows } from "./_helpers/paths";
 import { expectInTakoDir } from "./_helpers/assertions";
+import { shouldRunStartupUpdate } from "../src/app";
 import { buildCliInstallCommand, buildCliUpdateCommand } from "../src/updater";
 
 describe("Update Logic - path configuration", () => {
@@ -47,5 +48,13 @@ describe("Update Logic - path configuration", () => {
     expect(buildCliUpdateCommand()).not.toContain("optional");
     expect(buildCliInstallCommand()).not.toContain("--omit");
     expect(buildCliInstallCommand()).not.toContain("optional");
+  });
+
+  it("startup auto update is temporarily disabled in production mode", () => {
+    expect(shouldRunStartupUpdate(false)).toBe(false);
+  });
+
+  it("startup auto update remains disabled in dev mode", () => {
+    expect(shouldRunStartupUpdate(true)).toBe(false);
   });
 });
