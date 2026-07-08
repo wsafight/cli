@@ -78,6 +78,8 @@ export function buildWindowsHandoffScript(options: WindowsHandoffScriptOptions):
   }
 
   lines.push(
+    "try { [Console]::InputEncoding = [System.Text.Encoding]::UTF8 } catch {}",
+    "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}",
     `Set-Location -LiteralPath ${psSingleQuoted(options.cwd)}`,
     // ESC = [char]27，兼容 Windows 自带的 PowerShell 5.1（`e 是 7+ 才支持）
     "$esc = [char]27",

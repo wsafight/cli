@@ -510,9 +510,21 @@ async function ensurePlatformDep(
     // 检查平台包的二进制是否真正存在（不只看 package.json，Bun 可能装了目录但没提取二进制）
     const isWindows = process.platform === "win32";
     const binaryName = isWindows ? `${client.command}.exe` : client.command;
+    const depPkgPath = join(clientDir, "node_modules", dep.pkg, "package.json");
+    let depVersionMatches = false;
+    try {
+      const depPkgFile = Bun.file(depPkgPath);
+      if (await depPkgFile.exists()) {
+        const depPkgJson = await depPkgFile.json();
+        depVersionMatches = depPkgJson.version === dep.version;
+      }
+    } catch {
+      depVersionMatches = false;
+    }
+
     const depBinPath = join(clientDir, "node_modules", dep.pkg, binaryName);
     const depBinFile = Bun.file(depBinPath);
-    if (await depBinFile.exists() && depBinFile.size > 1024) return;
+    if (depVersionMatches && await depBinFile.exists() && depBinFile.size > 1024) return;
 
     // 未安装，显式安装平台包
     log.info(`正在安装平台包 ${dep.pkg}...`);
@@ -528,11 +540,11 @@ async function ensurePlatformDep(
           env: buildBunInstallEnv(registry),
         }
       );
-      await proc.exited;
-      if (proc.exitCode === 0) break;
+      const output = await streamBunInstall(proc, `正在安装平台包 ${dep.pkg}`, () => {});
+      const exitCode = await proc.exited;
+      if (exitCode === 0) break;
       if (version === "latest") {
-        const stderr = await new Response(proc.stderr).text();
-        log.warn(`平台包安装失败: ${stderr.slice(0, 200)}`);
+        log.warn(`平台包安装失败: ${output.slice(0, 200)}`);
       }
     }
   } catch (e) {
@@ -587,10 +599,10 @@ async function placeNativeBinary(client: ClientConfig, clientDir: string): Promi
         stdout: "pipe",
         stderr: "pipe",
       });
-      await proc.exited;
-      if (proc.exitCode !== 0) {
-        const stderr = await new Response(proc.stderr).text();
-        log.warn(`postinstall 失败: ${stderr.slice(0, 200)}`);
+      const output = await streamBunInstall(proc, "正在通过 postinstall 安装原生二进制", () => {});
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) {
+        log.warn(`postinstall 失败: ${output.slice(0, 200)}`);
       }
       // 检查是否成功
       const destFile = Bun.file(destPath);
@@ -862,8 +874,13 @@ async function isStubBinary(filePath: string): Promise<boolean> {
  * 确保客户端的原生二进制已就位
  * 解决 Bun 不运行 postinstall + 不安装 optionalDependencies 的问题
  */
-export async function ensureNativeBinary(client: ClientConfig): Promise<void> {
+export async function ensureNativeBinary(
+  client: ClientConfig,
+  options: { reinstallOnFailure?: boolean; forcePlace?: boolean } = {},
+): Promise<void> {
   if (client.runtime !== "native") return;
+  const reinstallOnFailure = options.reinstallOnFailure ?? true;
+  const forcePlace = options.forcePlace ?? false;
 
   const clientDir = getClientDir(client.id);
   const packageJsonPath = join(clientDir, "node_modules", client.package, "package.json");
@@ -883,8 +900,9 @@ export async function ensureNativeBinary(client: ClientConfig): Promise<void> {
 
     const binPath = join(clientDir, "node_modules", client.package, entryFile);
 
-    // 用二进制头部检测是否为真正的原生二进制
-    if (!(await isStubBinary(binPath))) return;
+    // 用二进制头部检测是否为真正的原生二进制。指定版本安装会强制重放置，
+    // 避免 package.json 已切到新版本但旧 claude.exe 仍留在 bin 里。
+    if (!forcePlace && !(await isStubBinary(binPath))) return;
 
     // 是 stub，需要修复：先确保平台包已安装，再直接复制二进制
     log.info("正在安装原生二进制...");
@@ -895,6 +913,10 @@ export async function ensureNativeBinary(client: ClientConfig): Promise<void> {
     const placed = await placeNativeBinary(client, clientDir);
 
     if (!placed || await isStubBinary(binPath)) {
+      if (!reinstallOnFailure) {
+        log.warn("原生二进制修复失败");
+        return;
+      }
       // 修复失败，删掉整个工具目录强制重装
       log.warn("原生二进制修复失败，正在重新安装...");
       const fs = await import("fs/promises");
