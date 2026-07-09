@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { getTakoDir, getTakoCliDir, getBunBin, isWindows } from "./_helpers/paths";
 import { expectInTakoDir } from "./_helpers/assertions";
 import { shouldRunStartupUpdate } from "../src/app";
-import { buildCliInstallCommand, buildCliUpdateCommand } from "../src/updater";
+import { buildCliUpdateCommand } from "../src/updater";
 
 describe("Update Logic - path configuration", () => {
   const takoDir = getTakoDir();
@@ -43,11 +43,9 @@ describe("Update Logic - path configuration", () => {
     expect(command).toContain("--latest");
   });
 
-  it("update/install should keep optional dependencies for OpenTUI", () => {
+  it("update command should not omit dependencies", () => {
     expect(buildCliUpdateCommand()).not.toContain("--omit");
     expect(buildCliUpdateCommand()).not.toContain("optional");
-    expect(buildCliInstallCommand()).not.toContain("--omit");
-    expect(buildCliInstallCommand()).not.toContain("optional");
   });
 
   it("startup auto update is temporarily disabled in production mode", () => {

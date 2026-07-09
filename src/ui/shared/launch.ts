@@ -1,5 +1,5 @@
 /**
- * 共享启动逻辑 — ink 与 opentui 主循环复用
+ * 共享启动逻辑 — Ink 主循环复用
  */
 
 import { launchClientUnified } from "../../launcher";
@@ -15,7 +15,6 @@ import type { LauncherResult } from "./types";
 
 /**
  * launcher 启动前置：迁移 / 修复 provider / 检测 / 目录刷新 / 公告。
- * ink 与 opentui 两个 main 完全一致。
  */
 export async function runPreLaunchSetup(): Promise<void> {
   await migrateIfNeeded();

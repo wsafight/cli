@@ -4,7 +4,7 @@
 
 | 文件 | 内容 |
 |---|---|
-| `tests/unit.update-logic.test.ts` | 更新命令路径、参数、optionalDependencies 保留、启动自动更新开关 |
+| `tests/unit.update-logic.test.ts` | 更新命令路径、参数、启动自动更新开关 |
 | `tests/pre-release.test.ts` | 发布前检查 CLI 目录和更新命令不含 `-g` |
 
 ## 场景
@@ -15,7 +15,7 @@
 |---|---|---|
 | TP-UPD-01a | CLI 更新命令 | 使用 Tako 本地 Bun，命令包含 `update tako-cli --latest` |
 | TP-UPD-01b | CLI 安装命令 | 使用 `add tako-cli@latest` |
-| TP-UPD-01c | OpenTUI optional dependency | 更新/安装命令不包含 `--omit optional` |
+| TP-UPD-01c | CLI 安装参数 | 不额外添加全局安装或依赖裁剪参数 |
 
 ### TP-UPD-02 启动自动更新临时禁用
 

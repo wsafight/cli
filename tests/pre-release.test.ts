@@ -16,8 +16,11 @@ describe("Pre-Release - Build System", () => {
   it("build artifact should exist", async () => {
     const distPath = join(getDistDir(), "index.js");
     await expectFileExists(distPath);
-    await expectFileExists(join(getDistDir(), "index-ink.js"));
-    await expectFileExists(join(getDistDir(), "index-opentui.js"));
+  });
+
+  it("legacy split backend artifacts should not exist", async () => {
+    expect(await Bun.file(join(getDistDir(), "index-ink.js")).exists()).toBe(false);
+    expect(await Bun.file(join(getDistDir(), "index-opentui.js")).exists()).toBe(false);
   });
 
   it("build artifact should contain shebang (Unix executable)", async () => {
@@ -31,26 +34,18 @@ describe("Pre-Release - Build System", () => {
   });
 
   it("build artifact should have reasonable size", async () => {
-    const dispatcher = Bun.file(join(getDistDir(), "index.js"));
-    const inkBundle = Bun.file(join(getDistDir(), "index-ink.js"));
-    const openTuiBundle = Bun.file(join(getDistDir(), "index-opentui.js"));
-
-    expect(dispatcher.size).toBeGreaterThan(100); // platform dispatcher
-    expect(dispatcher.size).toBeLessThan(1000);
-    expect(inkBundle.size).toBeGreaterThan(1000);
-    expect(inkBundle.size).toBeLessThan(1500000); // includes Ink/React
-    expect(openTuiBundle.size).toBeGreaterThan(1000);
-    expect(openTuiBundle.size).toBeLessThan(1000000); // OpenTUI backend, external native dep
+    const distPath = join(getDistDir(), "index.js");
+    const file = Bun.file(distPath);
+    const size = file.size;
+    expect(size).toBeGreaterThan(1000); // At least 1KB
+    expect(size).toBeLessThan(1500000); // Less than 1.5MB (includes Ink/React)
   });
 
-  it("platform bundles should keep TUI backends separated", async () => {
-    const inkBundle = await Bun.file(join(getDistDir(), "index-ink.js")).text();
-    const openTuiBundle = await Bun.file(join(getDistDir(), "index-opentui.js")).text();
+  it("build artifact should not load OpenTUI backend", async () => {
+    const bundle = await Bun.file(join(getDistDir(), "index.js")).text();
 
-    expect(inkBundle).not.toContain("@opentui/core");
-    expect(openTuiBundle).toContain("@opentui/core");
-    expect(openTuiBundle).not.toContain("react/jsx");
-    expect(openTuiBundle).not.toContain("react-devtools-core");
+    expect(bundle).not.toContain("@opentui/core");
+    expect(bundle).not.toContain("index-opentui");
   });
 
   it("build artifact should start without errors (smoke test)", async () => {
