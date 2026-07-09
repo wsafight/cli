@@ -44,8 +44,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Upgrade npm (OIDC trusted publishing requires >= 11.5.1)
-        run: npm install -g npm@latest
+      - name: Check npm publishing CLI
+        run: npx -y npm@11.5.1 --version
 
       - name: Install deps
         run: bun install --frozen-lockfile
@@ -66,4 +66,4 @@ jobs:
         run: bun run test:pre-release
 
       - name: Publish to npm (OIDC trusted publishing)
-        run: npm publish --provenance --access public
+        run: npx -y npm@11.5.1 publish --provenance --access public
