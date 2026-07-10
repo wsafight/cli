@@ -50,6 +50,25 @@ export function selectedArgs(
   return { args, envVars, selectedOptionIds };
 }
 
+export function selectedArgsWithGroupOverride(
+  current: LaunchSelectionSource,
+  group: string,
+  forcedOptionId?: string,
+): Pick<Extract<LauncherResult, { type: "launch" }>, "args" | "envVars" | "selectedOptionIds"> {
+  if (!forcedOptionId) return selectedArgs(current);
+
+  const nextEnabled = new Set(current.enabled);
+  for (const option of current.launchOptions) {
+    if (option.group === group) nextEnabled.delete(option.id);
+  }
+  nextEnabled.add(forcedOptionId);
+
+  return selectedArgs({
+    launchOptions: current.launchOptions,
+    enabled: nextEnabled,
+  });
+}
+
 export function enabledWithProviderDefaultModel(
   previous: Set<string>,
   options: LaunchOption[],

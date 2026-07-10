@@ -44,7 +44,21 @@ export function visibleModelOptions(
     if (enabled.has(option.id)) visibleIds.add(option.id);
   }
 
-  const list = groupOptions.filter((option) => visibleIds.has(option.id));
+  const rank = new Map(topIds.map((id, idx) => [id, idx]));
+  let extraRank = topIds.length;
+  for (const option of groupOptions) {
+    if (visibleIds.has(option.id) && !rank.has(option.id)) {
+      rank.set(option.id, extraRank++);
+    }
+  }
+
+  const list = groupOptions
+    .filter((option) => visibleIds.has(option.id))
+    .sort((a, b) => {
+      const rankDiff = (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER);
+      if (rankDiff !== 0) return rankDiff;
+      return (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
+    });
   return { list, hiddenCount: groupOptions.length - list.length };
 }
 
