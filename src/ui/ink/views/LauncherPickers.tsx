@@ -13,6 +13,7 @@ import { visibleModelOptions } from "../../shared/model-picker";
 const PICKER_FOOTER_HINTS = [
   ["↑↓", "选择", "select"],
   ["Enter", "确认", "confirm"],
+  ["m", "当前目录启动", "launch cwd"],
   ["Esc", "取消", "cancel"],
 ] as const;
 

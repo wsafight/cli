@@ -17,6 +17,7 @@ import {
   enabledWithProviderDefaultModel,
   getGroupSelection,
   selectedArgs,
+  selectedArgsWithGroupOverride,
 } from "../../shared/launch-options";
 import {
   buildGroupedGrid,
@@ -245,6 +246,16 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
     setPickingGroup(group);
   }, [enabled, options, pickCounts, stdout.columns, zh]);
 
+  const launchCurrentDirWithModel = useCallback((forcedOptionId?: string) => {
+    const selected = selectedArgsWithGroupOverride({ launchOptions: options, enabled }, "model", forcedOptionId);
+    onResult({
+      type: "launch",
+      clientId: current.client.id,
+      projectPath: projects[0]?.path,
+      ...selected,
+    });
+  }, [options, enabled, onResult, current.client.id, projects]);
+
   useInput(useCallback((input: string, key: any) => {
     // ─── 服务商 picker 模式 ───
     if (pickingProvider) {
@@ -297,6 +308,11 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
         const rowsInOrder = modelPickerRowsInOrder(ids, columnCount);
         const pickerLen = grid.flat.length;
         if (input === "q") { setPickingGroup(null); setModelPickerMode("collapsed"); return; }
+        if (input === "m") {
+          const pickedId = grid.flat[pickerIdx];
+          launchCurrentDirWithModel(pickedId);
+          return;
+        }
         if (key.escape) {
           if (initialModelPickerMode(groupOpts, pickCounts) === "grid") {
             setPickingGroup(null);
@@ -357,6 +373,16 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
         : { list: groupOpts, hiddenCount: 0 };
       const pickerLen = visible.list.length + 1 + (visible.hiddenCount > 0 ? 1 : 0);
       if (key.escape || input === "q") { setPickingGroup(null); setModelPickerMode("collapsed"); return; }
+      if (isModelGroup && input === "m") {
+        if (pickerIdx === 0) {
+          launchCurrentDirWithModel();
+          return;
+        }
+        if (visible.hiddenCount > 0 && pickerIdx === visible.list.length + 1) return;
+        const picked = visible.list[pickerIdx - 1];
+        launchCurrentDirWithModel(picked?.id);
+        return;
+      }
       if (key.upArrow) { setPickerIdx((p) => (p > 0 ? p - 1 : pickerLen - 1)); return; }
       if (key.downArrow) { setPickerIdx((p) => (p < pickerLen - 1 ? p + 1 : 0)); return; }
       if (key.return) {
@@ -469,7 +495,7 @@ function LauncherViewInner({ clients, defaultIdx, hasProviders, pickCounts, onRe
       const selected = selectedArgs({ launchOptions: options, enabled });
       onResult({ type: "launch", clientId: current.client.id, projectPath: project.path, ...selected });
     }
-  }, [focus, clientIdx, projectIdx, optionIdx, provIdx, provs, currentProv, current, projects, options, optionRows, enabled, clients, onResult, zh, pickingGroup, pickingProvider, pickerIdx, pickCounts, modelPickerMode, stdout.columns, openGroupPicker]));
+  }, [focus, clientIdx, projectIdx, optionIdx, provIdx, provs, currentProv, current, projects, options, optionRows, enabled, clients, onResult, zh, pickingGroup, pickingProvider, pickerIdx, pickCounts, modelPickerMode, stdout.columns, openGroupPicker, launchCurrentDirWithModel]));
 
   return (
     <Box flexDirection="column" paddingX={0} paddingY={0}>

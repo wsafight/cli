@@ -15,6 +15,8 @@ function GridFooter({ zh }: { zh: boolean }) {
       <Text dimColor>│</Text>
       <Text dimColor bold>Enter</Text><Text dimColor>{zh ? "确认" : "confirm"}</Text>
       <Text dimColor>│</Text>
+      <Text dimColor bold>m</Text><Text dimColor>{zh ? "当前目录启动" : "launch cwd"}</Text>
+      <Text dimColor>│</Text>
       <Text dimColor bold>Esc</Text><Text dimColor>{zh ? "返回" : "back"}</Text>
     </Box>
   );

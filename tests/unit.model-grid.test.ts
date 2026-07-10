@@ -61,7 +61,7 @@ describe("model picker grid and collapsed visibility", () => {
     expect(initialModelPickerMode(options, {})).toBe("grid");
   });
 
-  it("keeps selected models and top picked models in stable option order", () => {
+  it("shows top picked models in pick-count order and keeps selected models appended", () => {
     const options = [
       "model-a",
       "model-b",
@@ -97,6 +97,35 @@ describe("model picker grid and collapsed visibility", () => {
     ]);
     expect(result.hiddenCount).toBe(1);
     expect(initialModelPickerMode(options, { "model-b": 90 })).toBe("collapsed");
+  });
+
+  it("reorders visible picks by hotness even when source option order differs", () => {
+    const options = [
+      "model-minimax-m3",
+      "model-claude-fable-5",
+      "model-glm-5.2",
+      "model-kimi-k2.6",
+      "model-deepseek-v4-pro",
+      "model-mimo-v2.5-pro",
+    ].map(model);
+
+    const result = visibleModelOptions(options, new Set(), {
+      "model-glm-5.2": 6.6,
+      "model-deepseek-v4-pro": 2.0,
+      "model-kimi-k2.6": 0.98,
+      "model-claude-fable-5": 0.59,
+      "model-mimo-v2.5-pro": 0.39,
+      "model-minimax-m3": 0.14,
+    });
+
+    expect(result.list.map((o) => o.id)).toEqual([
+      "model-glm-5.2",
+      "model-deepseek-v4-pro",
+      "model-kimi-k2.6",
+      "model-claude-fable-5",
+      "model-mimo-v2.5-pro",
+      "model-minimax-m3",
+    ]);
   });
 
   it("builds rows and flat model ids with the requested column count", () => {
