@@ -48,8 +48,8 @@ describe("Update Logic - path configuration", () => {
     expect(buildCliUpdateCommand()).not.toContain("optional");
   });
 
-  it("startup auto update is temporarily disabled in production mode", () => {
-    expect(shouldRunStartupUpdate(false)).toBe(false);
+  it("startup auto update runs in production mode", () => {
+    expect(shouldRunStartupUpdate(false)).toBe(true);
   });
 
   it("startup auto update remains disabled in dev mode", () => {

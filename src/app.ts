@@ -15,7 +15,7 @@ import { listAvailableVersions, installAtVersion, getInstalledVersion } from "./
 import { IS_DEV } from "./config";
 
 const VERSION = process.env.VERSION || "dev";
-const STARTUP_AUTO_UPDATE_ENABLED = false;
+const STARTUP_AUTO_UPDATE_ENABLED = true;
 
 type UiMain = () => Promise<void>;
 
@@ -224,7 +224,7 @@ export async function runCli(main: UiMain): Promise<void> {
     return;
   }
 
-  // 启动时自动更新临时禁用，优先直接进入工具/面板。
+  // 检查自动更新
   if (shouldRunStartupUpdate(isDev)) await checkAndUpdate();
 
   // 注入 statusline 配置到 Claude Code
