@@ -316,3 +316,36 @@ export async function checkAndUpdate(): Promise<void> {
     // 静默失败，不影响正常使用
   }
 }
+
+/**
+ * 手动更新命令（tako update）
+ * 始终联网检查并执行更新，不受 STARTUP_AUTO_UPDATE_ENABLED 控制。
+ */
+export async function runUpdateCommand(): Promise<void> {
+  console.log(`Tako CLI 当前版本: v${CURRENT_VERSION}`);
+  console.log("正在检查更新...");
+
+  const result = await checkForUpdates();
+
+  if (!result.hasUpdate) {
+    if (result.latestVersion) {
+      console.log(`已是最新版本 v${CURRENT_VERSION}`);
+    } else {
+      console.log("检查更新失败，请检查网络连接后重试");
+    }
+    return;
+  }
+
+  console.log(`发现新版本: v${result.latestVersion}（当前: v${CURRENT_VERSION}）`);
+  console.log("正在更新...");
+
+  const success = await performUpdate(result.latestVersion);
+
+  if (success) {
+    console.log(`更新成功！请重启 tako 以使用新版本。`);
+  } else {
+    console.error("更新失败，请稍后重试或手动执行:");
+    console.error(`  cd ~/.tako/cli && bun update tako-cli --latest`);
+    process.exit(1);
+  }
+}

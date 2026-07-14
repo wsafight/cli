@@ -2,7 +2,7 @@
 import "./clients";
 
 // 导入模块
-import { checkAndUpdate } from "./updater";
+import { checkAndUpdate, runUpdateCommand } from "./updater";
 import { getClient } from "./clients/base";
 import { launchClientUnified } from "./launcher";
 import { t } from "./i18n";
@@ -39,6 +39,7 @@ ${t("cli.shortcutCodex")}
 ${t("cli.shortcutGemini")}
 
 Commands:
+  tako update                Update Tako CLI to the latest version
   tako install <client>     Install AI coding tool
   tako quota                Print Tako quota as JSON
   tako agent [--model X]    Start agent mode
@@ -164,6 +165,12 @@ export async function runCli(main: UiMain): Promise<void> {
     const { runQuotaCommand } = await import("./quota/command");
     const code = await runQuotaCommand(args.slice(1));
     if (code !== 0) process.exit(code);
+    return;
+  }
+
+  // update 命令：tako update
+  if (args[0] === "update") {
+    await runUpdateCommand();
     return;
   }
 
