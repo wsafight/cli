@@ -20,6 +20,8 @@ export async function launchClient(
   client: ClientConfig,
   options?: LaunchOptions
 ): Promise<{ success: boolean; error?: string; exitCode?: number }> {
+  const cleanupFiles = options?.cleanupFiles ?? [];
+  let cleanupTransferred = false;
   try {
     const workingDir = options?.projectPath || process.cwd();
     const providerContext = options?.providerContext;
@@ -98,8 +100,10 @@ export async function launchClient(
             command,
             cwd: workingDir,
             env: extraEnv,
+            cleanupFiles,
           },
         );
+        cleanupTransferred = true;
         return { success: true };
       }
     }
@@ -125,8 +129,10 @@ export async function launchClient(
             cwd: workingDir,
             env: extraEnv,
             relaunchCommand,
+            cleanupFiles,
           },
         );
+        cleanupTransferred = true;
         return { success: true };
       }
       // 没有 wrapper handoff 文件（如直接用 bun 跑、非 wrapper 环境）：
@@ -144,6 +150,7 @@ export async function launchClient(
         {
           command,
           cwd: workingDir,
+          cleanupFiles,
         },
       );
 
@@ -214,5 +221,10 @@ export async function launchClient(
       success: false,
       error: error instanceof Error ? error.message : "启动失败",
     };
+  } finally {
+    if (!cleanupTransferred && cleanupFiles.length > 0) {
+      const { rm } = await import("node:fs/promises");
+      await Promise.all(cleanupFiles.map((path) => rm(path, { force: true }).catch(() => {})));
+    }
   }
 }

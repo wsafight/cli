@@ -54,6 +54,20 @@ describe("Windows handoff script", () => {
     expect(script).toContain("$argv = @()");
   });
 
+  it("removes ephemeral client settings after the child exits", () => {
+    const script = buildWindowsHandoffScript({
+      command: ["C:\\claude.exe"],
+      cwd: "C:\\repo",
+      cleanupFiles: ["C:\\Users\\Bob's AppData\\tako\\launch-settings.json"],
+    });
+
+    const childIdx = script.indexOf("& 'C:\\claude.exe' @argv");
+    const cleanupIdx = script.indexOf(
+      "Remove-Item -LiteralPath 'C:\\Users\\Bob''s AppData\\tako\\launch-settings.json' -Force",
+    );
+    expect(cleanupIdx).toBeGreaterThan(childIdx);
+  });
+
   it("appends a relaunch command inside finally when provided (panel path)", () => {
     const script = buildWindowsHandoffScript({
       command: ["C:\\claude.exe"],

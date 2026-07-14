@@ -33,6 +33,8 @@ export interface WindowsHandoffScriptOptions {
    * 不传则子进程退出后 handoff 直接结束（等价于 quick-launch）。
    */
   relaunchCommand?: string[];
+  /** Ephemeral client config files removed after the child exits. */
+  cleanupFiles?: string[];
 }
 
 export function encodeWindowsPowerShellScript(script: string): Uint8Array {
@@ -94,6 +96,10 @@ export function buildWindowsHandoffScript(options: WindowsHandoffScriptOptions):
     // 再（可选）重开 Tako。先删除是为了即使重开命令抛错也不残留 token。
     "  Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue",
   );
+
+  for (const path of options.cleanupFiles ?? []) {
+    lines.push(`  Remove-Item -LiteralPath ${psSingleQuoted(path)} -Force -ErrorAction SilentlyContinue`);
+  }
 
   const relaunch = options.relaunchCommand ?? [];
   if (relaunch.length > 0) {

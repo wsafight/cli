@@ -23,6 +23,17 @@ TUI 前，父进程必须释放 stdin 和终端模式，避免子进程渲染出
 client 写入必要配置文件。最终它把合并后的 args/env/providerContext 传给
 `launcher-legacy.ts` 的 `launchClient`。
 
+### Claude Code 启动配置覆盖
+
+Claude Code 的用户 `settings.json` 可能写死 Provider 环境变量。launcher 不修改用户文件，
+也不禁用 `user` setting source；Claude adapter 为每次启动生成只包含认证、Base URL 和所选
+模型的最小 `--settings` overlay。这样命令行层只覆盖 Tako 拥有的字段，用户 skills/plugins
+仍会加载，project/local 配置也不会被整份用户配置反向覆盖。
+
+overlay 文件按 launch 唯一命名并限制访问权限。Unix 和直接启动路径在客户端退出后删除；
+Windows wrapper handoff 把清理责任转交给 PowerShell 脚本，在 `finally` 中删除，避免并发
+启动互相覆盖或凭据文件残留。
+
 ### Unix/macOS 直接启动
 
 非 Windows 平台在启动前调用 `settleTerminalForExternalChild()`：
@@ -72,3 +83,4 @@ Claude 更新确认 prompt 显示出来但按键无响应。
 - `tests/unit.windows-handoff.test.ts` - handoff 脚本 quoting、env、relaunch、UTF-8 BOM
 - `tests/unit.windows-wrapper.test.ts` - Windows wrapper handoff 文件路径和执行逻辑
 - `tests/platform.windows.test.ts` - Windows 路径和可执行文件扩展兼容
+- `tests/unit.claude-settings.test.ts` - Claude 最小 overlay、冲突字段与 setting source 保留
