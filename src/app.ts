@@ -43,6 +43,7 @@ Commands:
   tako install <client>     Install AI coding tool
   tako quota                Print Tako quota as JSON
   tako agent [--model X]    Start agent mode
+  tako sessions [search]    Search and resume native sessions
   tako skill list           List available skills
   tako skill install <name> Install skill to current project
   tako models [--refresh]   List models exposed by Tako providers
@@ -179,6 +180,12 @@ export async function runCli(main: UiMain): Promise<void> {
     loadCatalog();
     const { runAgentCommand } = await import("./agent/cmd");
     await runAgentCommand(args.slice(1));
+    return;
+  }
+
+  if (args[0] === "sessions") {
+    const { runSessionsCommand } = await import("./sessions/cmd");
+    await runSessionsCommand(args.slice(1));
     return;
   }
 

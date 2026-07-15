@@ -99,6 +99,21 @@ Manage persistent AI agent sessions from CLI or TUI. Sessions survive shell rest
 
 从 CLI 或 TUI 管理持久化的 AI agent 会话。会话跨 shell 重启保持。
 
+### Native Session Search / 原生会话搜索
+
+Launcher 项目列表第一项按 `↑` 即可进入历史会话搜索，统一检索 Claude Code、Codex 和 Gemini 的本地 session。搜索框留空时直接浏览最近会话，Claude/Codex 按 `Enter` 续接，Gemini 按 `Enter` 查看详情，按 `→` 均可查看最近对话。
+
+```bash
+tako sessions search "支付回调"
+tako sessions search "upstream timeout" --deep
+tako sessions resume codex:<session-id>
+tako sessions index --status
+tako sessions index --rebuild
+tako sessions index --clear
+```
+
+索引完全保存在本机 `~/.tako/session-index/`，目录权限为 `0700`、数据库文件权限为 `0600`。默认搜索排除 system/developer prompt；`--deep` 才包含工具输出和 reasoning。当前 Gemini 历史仅支持搜索和查看，不会伪装成可续接会话。
+
 ```bash
 tako agent run claude --prompt "fix the failing tests" --json  # One-shot task / 一次性任务
 tako agent start claude --model claude-sonnet-4-6   # Create session / 创建会话
