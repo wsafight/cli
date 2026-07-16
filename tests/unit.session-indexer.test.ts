@@ -99,4 +99,33 @@ describe("session indexer", () => {
     expect(calls).toBe(2);
     db.close();
   });
+
+  it("bounds source text passed to parsers for very large session files", async () => {
+    const path = dbPath();
+    const sourcePath = join(path, "..", "large.jsonl");
+    await mkdir(join(path, ".."), { recursive: true });
+    const head = "HEAD-METADATA\n";
+    const tail = "\nTAIL-RECENT";
+    await writeFile(sourcePath, head + "x".repeat(6 * 1024 * 1024) + tail);
+    const sourceInfo = await stat(sourcePath);
+    const db = new SessionDatabase(path);
+    let received = "";
+    const parser = Object.assign((text: string) => { received = text; return parsed("large"); }, { parserVersion: 1 });
+    await indexSessionCandidates(db, [{ source: "codex", path: sourcePath, size: sourceInfo.size, mtimeMs: 1 }], { codex: parser });
+    expect(received.length).toBeLessThan(3 * 1024 * 1024);
+    expect(received.startsWith("HEAD-METADATA")).toBe(true);
+    expect(received.endsWith("TAIL-RECENT")).toBe(true);
+    db.close();
+  });
+
+  it("keeps repeated large deep-search updates within a small disk budget", () => {
+    const path = dbPath();
+    const db = new SessionDatabase(path);
+    const value = parsed("bounded");
+    value.messages = Array.from({ length: 100 }, (_, ordinal) => ({ ordinal, role: "tool" as const, text: `tool-${ordinal}-` + "x".repeat(100_000), defaultSearchable: false, deepSearchable: true }));
+    for (let index = 0; index < 12; index++) db.replaceSession(value, { size: index + 1, mtimeMs: index + 1 });
+    db.optimize();
+    expect(db.status().bytes).toBeLessThan(5 * 1024 * 1024);
+    db.close();
+  });
 });

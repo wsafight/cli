@@ -4,11 +4,11 @@ import { basename, dirname } from "node:path";
 import type { NativeSessionSource, ParsedNativeSession, UnifiedSession, ParsedSessionMessage } from "./types";
 import { withSessionIndexLockSync } from "./lock";
 
-const SCHEMA_VERSION = 4;
-const MAX_DETAIL_MESSAGES = 32;
-const MAX_MESSAGE_TEXT = 4_096;
-const MAX_DEFAULT_SEARCH_TEXT = 64 * 1_024;
-const MAX_DEEP_SEARCH_TEXT = 96 * 1_024;
+const SCHEMA_VERSION = 5;
+const MAX_DETAIL_MESSAGES = 24;
+const MAX_MESSAGE_TEXT = 2_048;
+const MAX_DEFAULT_SEARCH_TEXT = 32 * 1_024;
+const MAX_DEEP_SEARCH_TEXT = 32 * 1_024;
 
 export interface SessionIndexStatus {
   sessions: number;
@@ -47,7 +47,11 @@ function escapeLike(value: string): string {
 }
 
 function ftsTerm(term: string): string {
-  return `"${term.replaceAll('"', '""')}"`;
+  return `"${term.replaceAll('"', '""')}"*`;
+}
+
+function requiresLikeFallback(term: string): boolean {
+  return [...term].length < 3 || /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(term);
 }
 
 export class SessionDatabase {
@@ -77,6 +81,7 @@ export class SessionDatabase {
       DROP TABLE IF EXISTS messages;
       DROP TABLE IF EXISTS source_files;
       DROP TABLE IF EXISTS sessions;
+      PRAGMA auto_vacuum = INCREMENTAL;
       CREATE TABLE sessions (
         session_key TEXT PRIMARY KEY,
         source TEXT NOT NULL,
@@ -106,7 +111,7 @@ export class SessionDatabase {
         session_key UNINDEXED,
         default_content,
         deep_content,
-        tokenize = 'trigram'
+        tokenize = 'unicode61'
       );
       PRAGMA user_version = ${SCHEMA_VERSION};
     `);
@@ -183,8 +188,8 @@ export class SessionDatabase {
     let textExpression = "''";
     if (terms.length) {
       join = "JOIN search_fts f ON f.session_key = s.session_key";
-      const requiresShortFallback = terms.some((term) => [...term].length < 3);
-      if (requiresShortFallback) {
+      const useLikeFallback = terms.some(requiresLikeFallback);
+      if (useLikeFallback) {
         for (const term of terms) {
           where.push(deep ? "(f.default_content LIKE ? ESCAPE '\\' OR f.deep_content LIKE ? ESCAPE '\\')" : "f.default_content LIKE ? ESCAPE '\\'");
           const pattern = `%${escapeLike(term)}%`;
@@ -235,6 +240,11 @@ export class SessionDatabase {
 
   clear(): void {
     this.db.exec("DELETE FROM search_fts; DELETE FROM messages; DELETE FROM source_files; DELETE FROM sessions; PRAGMA wal_checkpoint(TRUNCATE); VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");
+    this.secureFiles();
+  }
+
+  optimize(): void {
+    this.db.exec("INSERT INTO search_fts(search_fts) VALUES('optimize'); PRAGMA wal_checkpoint(TRUNCATE); PRAGMA incremental_vacuum(0);");
     this.secureFiles();
   }
 
